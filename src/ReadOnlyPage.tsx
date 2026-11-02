@@ -7,7 +7,7 @@ import './read-only.css';
 
 type Feed = 'popular' | 'news';
 type Sort = 'hot' | 'new' | 'top';
-type Listing = { posts: Post[]; after: string | null };
+type Listing = { posts: Post[]; after: string | null; access?: 'app-oauth' | 'public-json' };
 
 function redditLink(post: Post) {
   try { const url = new URL(post.permalink || ''); if (url.protocol === 'https:' && ['www.reddit.com', 'reddit.com'].includes(url.hostname)) return url.href; } catch { /* Construct a safe Reddit fallback. */ }
@@ -44,7 +44,7 @@ export default function ReadOnlyPage() {
     morePending.current = true; setMoreLoading(true); setMoreError('');
     try {
       const value = await request<Listing>(`/api/read-only?${new URLSearchParams({ feed, sort, after: data.after })}`, { credentials: 'omit', signal: controller.signal });
-      if (!controller.signal.aborted) setData(previous => ({ posts: [...previous.posts, ...value.posts.filter(post => !previous.posts.some(item => item.id === post.id))], after: value.after }));
+      if (!controller.signal.aborted) setData(previous => ({ posts: [...previous.posts, ...value.posts.filter(post => !previous.posts.some(item => item.id === post.id))], after: value.after, access: value.access }));
     } catch (error) { if (!controller.signal.aborted) setMoreError(error instanceof Error ? error.message : 'Could not load more posts.'); }
     finally { if (!controller.signal.aborted) { morePending.current = false; setMoreLoading(false); } }
   }
@@ -57,7 +57,7 @@ export default function ReadOnlyPage() {
     </header>
     <main className="reader-shell" id="reader-main" tabIndex={-1}>
       <div className="reader-heading"><div><span className="reader-test-label">Test page</span><h1>Read Only</h1><p>Browse r/popular and r/news. Posts open on Reddit.</p></div><Newspaper size={27} aria-hidden="true" /></div>
-      <p className="reader-notice">Public feeds · No account connection, voting, commenting, or posting. This page tests whether Reddit permits public feed requests.</p>
+      <p className="reader-notice">No Reddit account connection, voting, commenting, or posting. This reader uses app-authorized access when configured, or tests public feeds otherwise. Reddit API approval is still required for app access.</p>
       <nav className="reader-feed-tabs" aria-label="Choose feed">{(['popular', 'news'] as Feed[]).map(value => <button key={value} aria-pressed={feed === value} onClick={() => setFeed(value)}>r/{value}</button>)}</nav>
       <div className="reader-toolbar"><div className="sort-tabs" aria-label="Sort posts">{(['hot', 'new', 'top'] as Sort[]).map(value => <button key={value} aria-pressed={sort === value} className={sort === value ? 'active' : ''} onClick={() => setSort(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div><div className="reader-tools"><span>{sort === 'top' ? 'Top this week' : `r/${feed}`}</span><button className="icon-button" aria-label="Refresh feed" disabled={loading} onClick={() => setReload(value => value + 1)}><RefreshCw size={16} /></button></div></div>
       {loading ? <div className="empty-state" role="status"><h2>Loading r/{feed}…</h2><p>Requesting posts from Reddit.</p></div> : error ? <div className="reader-error" role="alert"><h2>Couldn’t load r/{feed}</h2><p>{error}</p><div><button className="button" onClick={() => setReload(value => value + 1)}>Try again</button><a className="button" href={`https://www.reddit.com/r/${feed}/`} target="_blank" rel="noopener noreferrer">Browse on Reddit<ExternalLink size={14} /></a></div></div> : <>
@@ -72,7 +72,7 @@ export default function ReadOnlyPage() {
         {moreError && <p className="reader-more-error" role="alert">{moreError}</p>}
         {data.after ? <div className="load-more"><button className="button" onClick={loadMore} disabled={moreLoading}>{moreLoading ? 'Loading…' : 'Load more posts'}<ArrowDown size={15} /></button></div> : data.posts.length > 0 && <p className="feed-end-label">End of feed</p>}
       </>}
-      <footer className="content-footer"><span>Pureddit · Read Only test</span><span>Public access may be blocked or rate-limited by Reddit.</span></footer>
+      <footer className="content-footer"><span>Pureddit · Read Only test{data.access && ` · ${data.access === 'app-oauth' ? 'App-authorized' : 'Public JSON'}`}</span><span>Access remains subject to Reddit’s permissions and rate limits.</span></footer>
     </main>
   </>;
 }

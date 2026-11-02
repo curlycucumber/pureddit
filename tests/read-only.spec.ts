@@ -83,3 +83,12 @@ test('HTML platform failures identify the feed endpoint and HTTP status without 
   await expect(page.getByRole('alert')).not.toContainText('Private diagnostic text');
   await expect(page.getByRole('article')).toHaveCount(0);
 });
+
+
+test('Read Only labels app-authorized results without sign-in controls', async ({ page }) => {
+  await page.route('**/api/read-only?**', route => route.fulfill({ json: { posts: [sample('app')], after: null, access: 'app-oauth' } }));
+  await page.goto('/#/read-only');
+  await expect(page.getByRole('article')).toHaveCount(1);
+  await expect(page.locator('.reader-shell footer')).toContainText('App-authorized');
+  await expect(page.getByRole('button', { name: /Sign in/ })).toHaveCount(0);
+});

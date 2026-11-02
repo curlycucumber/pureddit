@@ -196,7 +196,7 @@ test('blocked public access returns the upstream failure without sample data', a
 
 test('Read Only ignores account cookies and fetches only the two public feed sources without credentials', async () => {
   const cookie = sessionCookie();
-  delete process.env.REDDIT_CLIENT_SECRET; delete process.env.SESSION_SECRET;
+  delete process.env.REDDIT_CLIENT_ID; delete process.env.REDDIT_CLIENT_SECRET; delete process.env.SESSION_SECRET;
   respond = () => Response.json({ data: { children: [thing('a'), thing('ad', 'news', { promoted: true })], after: 't3_next' } });
   for (const feed of ['popular', 'news']) {
     const response = await fetch(`${base}/api/read-only?feed=${feed}&sort=top&after=t3_next`, { headers: { Cookie: cookie } });
@@ -210,10 +210,64 @@ test('Read Only ignores account cookies and fetches only the two public feed sou
 });
 
 test('Read Only rejects writes and arbitrary feeds and reports public access blocks', async () => {
+  delete process.env.REDDIT_CLIENT_ID; delete process.env.REDDIT_CLIENT_SECRET;
   assert.equal((await fetch(`${base}/api/read-only`, { method: 'POST', body: '{}' })).status, 405);
   for (const query of ['feed=worldnews', 'feed=https://evil.invalid', 'sort=invalid', 'after=invalid']) assert.equal((await fetch(`${base}/api/read-only?${query}`)).status, 400);
   assert.equal(calls.length, 0);
   respond = () => Response.json({}, { status: 403 });
   const response = await fetch(`${base}/api/read-only?feed=news`);
   assert.equal(response.status, 403); const data = await response.json(); assert.match(data.error, /blocked this public feed/); assert.equal(data.posts, undefined);
+});
+
+
+test('Read Only app authorization needs no user session and reuses an app token across both feeds', async () => {
+  process.env.REDDIT_CLIENT_ID = 'read-only-web-app';
+  delete process.env.SESSION_SECRET; delete process.env.REDDIT_REDIRECT_URI;
+  respond = (url, options) => {
+    if (url.endsWith('/access_token')) {
+      const parameters = new URLSearchParams(String(options!.body));
+      assert.equal(parameters.get('grant_type'), 'client_credentials'); assert.equal(parameters.get('scope'), 'read');
+      assert.equal(parameters.has('password'), false); assert.equal(parameters.has('refresh_token'), false);
+      assert.match((options!.headers as Record<string, string>).Authorization, /^Basic /);
+      return Response.json({ access_token: 'private-app-token', token_type: 'bearer', expires_in: 3600 });
+    }
+    assert.equal((options!.headers as Record<string, string>).Authorization, 'Bearer private-app-token');
+    assert.equal((options!.headers as Record<string, string>).Cookie, undefined);
+    return Response.json({ data: { children: [thing('a')], after: null } });
+  };
+  for (const feed of ['popular', 'news']) {
+    const response = await fetch(`${base}/api/read-only?feed=${feed}`);
+    assert.equal(response.status, 200); const text = await response.text();
+    assert.equal(JSON.parse(text).access, 'app-oauth'); assert.doesNotMatch(text, /private-app-token|test-client-secret/);
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.equal(new URL(calls.at(-1)!.url).pathname, `/r/${feed}/hot`);
+  }
+  assert.equal(calls.filter(call => call.url.endsWith('/access_token')).length, 1);
+  assert.equal(calls.filter(call => call.url.startsWith('https://oauth.reddit.com/')).length, 2);
+});
+
+test('Read Only coalesces token acquisition, renews expired tokens, and handles changed credentials', async () => {
+  process.env.REDDIT_CLIENT_ID = 'parallel-app';
+  respond = url => url.endsWith('/access_token') ? Response.json({ access_token: 'parallel-token', token_type: 'bearer', expires_in: 3600 }) : Response.json({ data: { children: [] } });
+  const replies = await Promise.all(['popular', 'news'].map(feed => fetch(`${base}/api/read-only?feed=${feed}`)));
+  assert.ok(replies.every(response => response.status === 200)); assert.equal(calls.filter(call => call.url.endsWith('/access_token')).length, 1);
+  process.env.REDDIT_CLIENT_ID = 'rotated-app';
+  respond = url => url.endsWith('/access_token') ? Response.json({ access_token: 'short-lived-token', token_type: 'bearer', expires_in: 1 }) : Response.json({ data: { children: [] } });
+  await fetch(`${base}/api/read-only?feed=popular`); await fetch(`${base}/api/read-only?feed=news`);
+  assert.equal(calls.filter(call => call.url.endsWith('/access_token')).length, 3);
+});
+
+test('Read Only rejects partial configuration and denied app access without anonymous fallback', async () => {
+  delete process.env.REDDIT_CLIENT_SECRET;
+  assert.equal((await fetch(`${base}/api/read-only?feed=popular`)).status, 503); assert.equal(calls.length, 0);
+  process.env.REDDIT_CLIENT_ID = 'denied-app'; process.env.REDDIT_CLIENT_SECRET = 'test-secret';
+  respond = () => Response.json({}, { status: 401 });
+  const denied = await fetch(`${base}/api/read-only?feed=popular`);
+  assert.equal(denied.status, 403); assert.match((await denied.json()).error, /denied application authorization/);
+  assert.equal(calls.length, 1); assert.ok(calls[0].url.endsWith('/access_token'));
+  process.env.REDDIT_CLIENT_ID = 'feed-denied-app';
+  respond = url => url.endsWith('/access_token') ? Response.json({ access_token: 'denied-feed-token', token_type: 'bearer', expires_in: 3600 }) : Response.json({}, { status: 403 });
+  const feedDenied = await fetch(`${base}/api/read-only?feed=news`);
+  assert.equal(feedDenied.status, 403); assert.match((await feedDenied.json()).error, /verify Reddit API approval/);
+  assert.equal(calls.length, 3); assert.equal(calls.some(call => call.url.includes('.json')), false);
 });
