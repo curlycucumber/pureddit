@@ -30,7 +30,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
     </header>
     <div class="view-controls" aria-label="Appearance preferences">
       <div class="view-control"><span class="view-label">Layout</span><div class="segmented" role="group" aria-label="Page layout"><button type="button" data-appearance="modern" aria-label="Modern layout" aria-pressed="true">Modern</button><button type="button" data-appearance="old" aria-label="Old layout" aria-pressed="false">Old</button></div></div>
-      <div class="view-control"><span class="view-label">Theme</span><div class="segmented" role="group" aria-label="Color theme"><button type="button" data-color-scheme="light" aria-label="Light mode" aria-pressed="true"><span>Light</span></button><button type="button" data-color-scheme="dark" aria-label="Dark mode" aria-pressed="false"><span>Dark</span></button></div></div>
+      <div class="view-control"><div class="segmented" role="group" aria-label="Color theme"><button type="button" data-color-scheme="light" aria-label="Light mode" title="Light mode" aria-pressed="true"></button><button type="button" data-color-scheme="dark" aria-label="Dark mode" title="Dark mode" aria-pressed="false"></button></div></div>
     </div>
     <div class="classic-navigation"></div>
     <div class="layout">

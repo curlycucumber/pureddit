@@ -7,7 +7,7 @@ export const HOME_URL = 'https://www.reddit.com/';
 export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
 export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
-export const VERSION = '0.3.1';
+export const VERSION = '0.3.2';
 export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [] };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 
