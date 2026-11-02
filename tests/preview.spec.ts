@@ -118,7 +118,7 @@ test('top-of-page layout and theme controls work together and persist after relo
   await reader.getByRole('button',{name:'Dark mode',exact:true}).click();
   await expect(reader.locator('.reader')).toHaveAttribute('data-appearance','old');
   await expect(reader.locator('.reader')).toHaveAttribute('data-theme','dark');
-  expect(await reader.locator('main').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(17, 26, 35)');
+  expect(await reader.locator('main').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(16, 18, 20)');
   await page.reload();
   await expect(reader.getByRole('button',{name:'Old layout',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(reader.getByRole('button',{name:'Dark mode',exact:true})).toHaveAttribute('aria-pressed','true');
