@@ -40,8 +40,33 @@ test('shortcuts, five recent communities, preview persistence, and scoped legacy
   await expect(reader.getByRole('button', { name: 'Remove r/books shortcut' })).toHaveCount(0);
 });
 
-test('mobile community controls and preview accessibility work without horizontal overflow', async ({ page }) => {
+test('old appearance visibly changes density and navigation, persists, and switches back', async ({ page }) => {
+  await page.goto('/');
+  const reader=page.locator('#reader-host'), firstPost=reader.getByRole('article').first();
+  const modernPost=await firstPost.boundingBox(), modernSidebar=await reader.locator('.sidebar').boundingBox();
+  expect(modernSidebar!.x).toBeLessThan(modernPost!.x);
+  await expect(reader.locator('.rank').first()).toBeHidden();
+  const title=await reader.locator('.post-title').first().textContent();
+  await page.getByLabel('Page layout').selectOption('old');
+  const oldPost=await firstPost.boundingBox(), oldSidebar=await reader.locator('.sidebar').boundingBox();
+  expect(oldPost!.height).toBeLessThan(modernPost!.height * 0.75);
+  expect(oldSidebar!.x).toBeGreaterThan(oldPost!.x+oldPost!.width);
+  await expect(reader.locator('.rank').first()).toHaveText('1');
+  await expect(reader.locator('.rank').first()).toBeVisible();
+  await expect(reader.locator('.classic-navigation').getByRole('link',{name:'Popular',exact:true})).toBeVisible();
+  expect((await reader.locator('.thumbnail').first().boundingBox())!.width).toBe(60);
+  await expect(reader.locator('.post-title').first()).toHaveText(title!);
+  await page.reload();await expect(page.getByLabel('Page layout')).toHaveValue('old');
+  await expect(reader.locator('.reader')).toHaveAttribute('data-appearance','old');
+  await page.getByLabel('Page layout').selectOption('modern');
+  await expect(reader.locator('.rank').first()).toBeHidden();
+  await expect(reader.locator('.sidebar').getByRole('link',{name:'Popular',exact:true})).toBeVisible();
+  expect((await firstPost.boundingBox())!.height).toBe(modernPost!.height);
+});
+
+for (const appearance of ['modern','old']) test(`${appearance} mobile community controls and accessibility work without horizontal overflow`, async ({ page }) => {
   await page.setViewportSize({ width:390,height:844 }); await page.goto('/');
+  await page.getByLabel('Page layout').selectOption(appearance);
   await page.getByRole('button', { name:'Safari · iPhone' }).click();
   const reader=page.locator('#reader-host');
   await reader.getByRole('button',{name:'Communities',exact:true}).click();

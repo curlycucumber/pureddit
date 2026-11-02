@@ -34,6 +34,7 @@ async function start() {
     ui = mountReader(root, __PUREDDIT_THEME__, {
       original: () => { showOriginal(); visibility(); },
       navigate: url => { location.href = url; },
+      appearance: value => { void save({ ...preferences, appearance: value }); },
       pin: name => { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) void save({ ...preferences, pins: [...preferences.pins, name] }); },
       unpin: name => { void save({ ...preferences, pins: preferences.pins.filter(item => item !== name) }); },
     });

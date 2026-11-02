@@ -14,6 +14,9 @@ test('local preferences validate and deduplicate names without retaining arbitra
   assert.equal(value.enabled, false); assert.deepEqual(value.pins, ['news','books']); assert.equal(value.recent.length, 5);
   assert.equal('token' in value, false); assert.deepEqual(normalizePreferences(null), DEFAULTS);
   assert.equal(normalizePreferences({ pins: Array.from({ length: 60 }, (_, index) => `community${index}`) }).pins.length, 50);
+  assert.equal(normalizePreferences({appearance:'old'}).appearance, 'old');
+  assert.equal(normalizePreferences({appearance:'unsupported'}).appearance, 'modern');
+  assert.equal(normalizePreferences({pins:['books']}).appearance, 'modern');
 });
 test('recent communities are unique, chronological, and limited to five', () => {
   let value = normalizePreferences(DEFAULTS);

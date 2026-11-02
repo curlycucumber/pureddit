@@ -52,6 +52,7 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Test both `www.reddit.com` and `old.reddit.com` feeds while signed in and signed out.
 - Confirm native Reddit has loaded posts before comparing the reading view.
 - Confirm title/thumbnail accuracy, filters, and New/Hot/Top navigation.
+- Switch Reading layout between Modern Reddit and Old Reddit; confirm compact rows and a right sidebar on desktop, mobile Communities access, and persistence after refreshing. The preview uses its outer Page layout control for the same choice.
 - Add/remove a local shortcut and visit six communities; only five recents should remain.
 - Choose Show Reddit, use a normal native account control, then return with Reading view.
 - Open a post; its discussion should stay native. Navigate back to a feed.

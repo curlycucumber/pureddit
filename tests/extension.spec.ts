@@ -31,8 +31,11 @@ test('built content harness reads native cards, updates dynamically, restores Re
   await expect(reader.getByRole('article')).toHaveCount(1);
   await expect(reader.getByRole('link',{name:'A post already loaded on Reddit',exact:true})).toBeVisible();
   expect(await page.locator('#native').evaluate(node=>(node as HTMLElement).inert)).toBe(true);
+  await reader.getByLabel('Reading layout').selectOption('old');
+  await expect(reader.locator('.rank').first()).toBeVisible();
   await reader.getByLabel('Add a shortcut',{exact:true}).fill('books');await reader.getByRole('button',{name:'Add community shortcut'}).click();
   await page.reload();await inject(page);await expect(reader.getByRole('button',{name:'Remove r/books shortcut'})).toBeVisible();
+  await expect(reader.getByLabel('Reading layout')).toHaveValue('old');
   await page.evaluate(()=>{const post=document.createElement('shreddit-post');post.setAttribute('post-title','A newly loaded native post');post.setAttribute('subreddit-name','books');post.setAttribute('permalink','/r/books/comments/new123/title/');document.querySelector('#native')!.append(post);});
   await expect(reader.getByRole('article')).toHaveCount(2);
   await reader.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();

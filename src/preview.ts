@@ -16,11 +16,11 @@ try {
   const stored = localStorage.getItem(KEY); if (stored) preferences = normalizePreferences(JSON.parse(stored));
 } catch { /* Preview remains usable without storage. */ }
 let page = pageFromUrl('https://www.reddit.com/r/popular/')!;
-let layout: 'modern' | 'old' = 'modern';
 const host = document.querySelector<HTMLElement>('#reader-host')!;
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(preferences)); } catch { reader.message('Preview preferences could not be saved in this browser.'); } }
 const reader = mountReader(host.attachShadow({ mode: 'open' }), theme, {
   preview: true,
+  appearance(value) { preferences = { ...preferences, appearance: value }; persist(); render(); },
   original() { const notice = document.querySelector<HTMLElement>('.preview-message')!; notice.hidden = false; notice.textContent = 'In the installed extension, Show Reddit restores the original page and native account controls. This preview contains illustrative fixtures only.'; },
   navigate(url) {
     const next = pageFromUrl(url);
@@ -31,7 +31,8 @@ const reader = mountReader(host.attachShadow({ mode: 'open' }), theme, {
   unpin(name) { preferences = { ...preferences, pins: preferences.pins.filter(item => item !== name) }; persist(); render(); },
 });
 function render() {
-  reader.update({ ...extractPosts(createFixture(layout, page.kind === 'home' ? 'home' : page.community || 'popular'), location.href), page, preferences, preview: true });
+  reader.update({ ...extractPosts(createFixture(preferences.appearance, page.kind === 'home' ? 'home' : page.community || 'popular'), location.href), page, preferences, preview: true });
+  document.querySelector<HTMLSelectElement>('#layout')!.value = preferences.appearance;
   document.querySelector('#address')!.textContent = page.kind === 'home' ? 'reddit.com/new' : communityUrl(page.community!).replace('https://www.', '').replace(/\/$/, '');
 }
 document.querySelectorAll<HTMLButtonElement>('[data-device]').forEach(button => button.addEventListener('click', () => {
@@ -39,5 +40,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-device]').forEach(button => 
   const mobile = button.dataset.device === 'safari'; document.querySelector('.device-frame')!.classList.toggle('iphone', mobile);
   document.querySelector('.preview-caption')!.textContent = mobile ? 'iPhone-sized design preview. Safari installation requires a Mac, Xcode, signing, and testing on an iPhone.' : 'Same renderer and stylesheet as the extension. This is a visual preview, not a browser compatibility test.';
 }));
-document.querySelector<HTMLSelectElement>('#layout')!.addEventListener('change', event => { layout = (event.target as HTMLSelectElement).value as 'modern' | 'old'; render(); });
+document.querySelector<HTMLSelectElement>('#layout')!.addEventListener('change', event => {
+  preferences = { ...preferences, appearance: (event.target as HTMLSelectElement).value === 'old' ? 'old' : 'modern' };
+  persist(); render();
+});
 render();

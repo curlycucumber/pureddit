@@ -10,6 +10,8 @@
 
 `scripts/build-extensions.mjs` bundles a self-contained content script and popup for each browser, adds browser-specific manifest metadata, and generates ZIPs in the Vercel output. Safari's resource bundle is an input to Apple's converter, not a signed iOS application.
 
+The validated `appearance` preference selects modern cards or the classic compact layout independently of the adapter's detected Reddit markup. The preview's Page layout selector and the installed reader's Reading layout selector save this preference in their respective local storage. Older records without the field default to modern. Both appearances share the same extracted posts and real navigation; the classic score column is a static display, not a voting control.
+
 ## Maintenance boundaries
 
 Reddit's markup, feed selection, and native loading behavior can change. The adapter intentionally supports known card shapes, uses explicit promotion/recommendation markers, and provides a native-view escape path when unsupported. It does not claim to identify all suggested content, force subscribed-only content on an arbitrary native page, or fetch missing pages. Home links to chronological `/new/`; the user's actual Reddit session determines their content.

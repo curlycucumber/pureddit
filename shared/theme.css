@@ -11,3 +11,156 @@ main{overflow:auto;min-width:0;padding:28px 30px;background:#fff;outline:none}.h
 
 .community-toggle{display:none;background:#fff;border:1px solid #91abc5;color:#24537e;border-radius:5px;padding:7px 9px;font-size:10px;margin-left:auto}.topbar .original{margin-left:auto}
 @container reader (max-width:500px){.community-toggle{display:inline-flex}.topbar{gap:8px}.topbar .original{margin-left:0}.reader[data-communities=open] .shortcuts-section{display:block;padding:14px 0}.reader[data-communities=open] .recent-section:not([hidden]){display:block;padding:14px 0 0}.sidebar .shortcut-note{max-width:300px}}
+
+.classic-navigation, .rank, .score-column { display: none; }
+.appearance-control {
+  font: inherit;
+  font-size: 11px;
+  color: #24537e;
+  background: #fff;
+  border: 1px solid #91abc5;
+  border-radius: 4px;
+  padding: 5px;
+}
+.reader[data-preview=true] .appearance-control { display: none; }
+
+/* Classic appearance is independent of the native Reddit markup being read. */
+.reader[data-appearance=old] { font-family: Verdana, Arial, sans-serif; }
+.reader[data-appearance=old] .topbar {
+  height: 50px;
+  min-height: 50px;
+  padding: 0 12px;
+  gap: 16px;
+  background: #cee3f8;
+  border-bottom: 0;
+}
+.reader[data-appearance=old] .brand { font-family: Arial, sans-serif; font-size: 30px; }
+.reader[data-appearance=old] .original { border-radius: 0; padding: 5px 9px; }
+.reader[data-appearance=old] .classic-navigation {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 5px 24px;
+  padding: 2px 12px 0;
+  background: #cee3f8;
+  border-bottom: 1px solid #5f99cf;
+}
+.reader[data-appearance=old] .primary,
+.reader[data-appearance=old] .sorts {
+  display: flex;
+  gap: 3px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+.reader[data-appearance=old] .classic-navigation a {
+  display: block;
+  padding: 2px 8px;
+  font: bold 12px Arial, sans-serif;
+  color: #315a7d;
+  background: #eff6fc;
+  border: 1px solid #bdcedd;
+  border-bottom: 0;
+  border-radius: 0;
+}
+.reader[data-appearance=old] .classic-navigation a[aria-current] {
+  color: #b33000;
+  background: #fff;
+  border-color: #5f99cf;
+}
+.reader[data-appearance=old] .layout { grid-template-columns: minmax(0, 1fr) 280px; }
+.reader[data-appearance=old] main { order: 1; padding: 10px 10px 18px 6px; }
+.reader[data-appearance=old] .sidebar {
+  order: 2;
+  background: #fff;
+  border: 0;
+  padding: 16px 12px;
+}
+.reader[data-appearance=old] .sidebar section { border-top: 1px solid #b4b8ad; padding-top: 12px; }
+.reader[data-appearance=old] .sidebar h2 {
+  margin: 0 0 8px;
+  color: #222;
+  font: bold 16px Arial, sans-serif;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.reader[data-appearance=old] .community-link { padding: 3px 0; color: #315a7d; font-size: 11px; }
+.reader[data-appearance=old] .pin-form { margin: 14px 0 0; }
+.reader[data-appearance=old] .pin-form input,
+.reader[data-appearance=old] .pin-form button { border-radius: 0; }
+.reader[data-appearance=old] .shortcut-note,
+.reader[data-appearance=old] .version { margin-left: 0; margin-right: 0; }
+.reader[data-appearance=old] .source-label,
+.reader[data-appearance=old] .description,
+.reader[data-appearance=old] .source-status { display: none; }
+.reader[data-appearance=old] .heading { margin: 0 4px 8px; align-items: center; }
+.reader[data-appearance=old] .heading h1 { font: bold 15px Arial, sans-serif; letter-spacing: 0; }
+.reader[data-appearance=old] .toolbar { justify-content: end; margin: 0 4px 8px; }
+.reader[data-appearance=old][data-preview=true] .toolbar { display: none; }
+.reader[data-appearance=old] .posts { border: 0; border-radius: 0; }
+.reader[data-appearance=old] .post {
+  align-items: center;
+  gap: 7px;
+  padding: 5px 2px;
+  border: 0;
+  background: #fff;
+}
+.reader[data-appearance=old] .rank {
+  display: block;
+  width: 19px;
+  flex-shrink: 0;
+  text-align: right;
+  font: 16px Arial, sans-serif;
+  color: #767676;
+}
+.reader[data-appearance=old] .score-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 34px;
+  flex-shrink: 0;
+  color: #666;
+  font: bold 11px Arial, sans-serif;
+}
+.score-arrow { width: 0; height: 0; border: 6px solid transparent; }
+.score-arrow.up { border-top: 0; border-bottom: 8px solid #a1a1a1; }
+.score-arrow.down { border-bottom: 0; border-top: 8px solid #a1a1a1; }
+.reader[data-appearance=old] .thumbnail {
+  width: 60px;
+  height: 45px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #f0f0f0;
+}
+.reader[data-appearance=old] .post-content { display: flex; flex-direction: column; }
+.reader[data-appearance=old] .post h2 { order: 0; font: normal 16px/1.25 Arial, sans-serif; }
+.reader[data-appearance=old] .post-title { color: #0000ee; }
+.reader[data-appearance=old] .post-title:visited { color: #551a8b; }
+.reader[data-appearance=old] .meta { order: 1; margin: 2px 0 0; font: 10px/1.4 Verdana, sans-serif; color: #666; }
+.reader[data-appearance=old] .subreddit { color: #315a7d; font-weight: normal; }
+.reader[data-appearance=old] .details { order: 2; margin-top: 1px; gap: 10px; color: #666; font-size: 10px; }
+.reader[data-appearance=old] .details a { font-weight: bold; }
+.reader[data-appearance=old] .post-points { display: none; }
+.reader[data-appearance=old] .native-note { margin-left: 0; }
+.reader[data-appearance=old] .reading-note { margin: 16px 4px 0; }
+
+@container reader (max-width: 800px) {
+  .reader[data-appearance=old] .layout { grid-template-columns: minmax(0, 1fr) 190px; }
+}
+@container reader (max-width: 500px) {
+  .reader[data-appearance=old] .topbar { padding: 0 10px; gap: 8px; }
+  .reader[data-appearance=old] .brand { font-size: 23px; }
+  .reader[data-appearance=old] .classic-navigation { padding-left: 8px; gap: 5px 12px; }
+  .reader[data-appearance=old] .classic-navigation a { padding: 4px 7px; font-size: 11px; }
+  .reader[data-appearance=old] .sidebar { display: none; order: 0; padding: 0 12px; border-bottom: 1px solid #b4b8ad; }
+  .reader[data-appearance=old][data-communities=open] .sidebar { display: block; }
+  .reader[data-appearance=old] main { padding: 10px 6px; }
+  .reader[data-appearance=old] .post { gap: 5px; align-items: start; padding: 7px 0; }
+  .reader[data-appearance=old] .rank { width: 14px; font-size: 12px; padding-top: 6px; }
+  .reader[data-appearance=old] .score-column { width: 29px; font-size: 10px; padding-top: 2px; }
+  .reader[data-appearance=old] .thumbnail { width: 40px; height: 38px; margin-top: 2px; }
+  .reader[data-appearance=old] .post h2 { font-size: 14px; line-height: 1.3; }
+}

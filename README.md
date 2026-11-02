@@ -52,6 +52,7 @@ dist/downloads/pureddit-safari.zip
 - Supports modern `shreddit-post` cards and old Reddit `.thing.link` cards, using only content already present on the opened page.
 - Home opens Reddit's chronological `/new/` page. Reddit determines the feed using the browser's existing account session. Popular opens `/r/popular/`, News opens `/r/news/`.
 - Provides New/Hot/Top navigation, native post/comment links, Reddit-provided thumbnails, local community shortcuts, and five recent communities. Explicitly marked NSFW/spoiler cards keep their image previews hidden.
+- Choose Modern Reddit or Old Reddit in the preview's Page layout control or the extension's Reading layout control. Old Reddit uses compact numbered rows, a static score column, blue titles, tab navigation, and a right sidebar. The appearance is saved locally and works independently of Reddit's native page markup. Score arrows are decorative; use Show Reddit for voting.
 - Omits explicitly marked promoted/recommendation cards. Unmarked recommendations cannot be reliably identified. This is not a guarantee about Reddit's feed selection.
 - `Show Reddit` restores the original page and controls. The floating `Reading view` button returns to Pureddit. This is also how to load more native content: browse/scroll the original page, then return to the reading view.
 - Discussion, profile, inbox, login, settings, wiki, and other non-feed pages remain in Reddit's native interface. Voting, commenting, posting, and Reddit subscription management happen there, not in a simulated Pureddit account.
@@ -60,7 +61,7 @@ dist/downloads/pureddit-safari.zip
 
 ## Data and migration
 
-There is **no backend, database, OAuth, token exchange, or Reddit API request** in this version. Extension state is limited to enabled status, shortcut names, and five recent community names in `storage.local`. It is not transmitted. Reddit text and thumbnails are read from the current page, not persisted by the extension. Links and existing thumbnails can make normal browser requests when displayed or opened; the extension does not proxy or fetch its own feeds.
+There is **no backend, database, OAuth, token exchange, or Reddit API request** in this version. Extension state is limited to enabled status, layout preference, shortcut names, and five recent community names in `storage.local`. It is not transmitted. Reddit text and thumbnails are read from the current page, not persisted by the extension. Links and existing thumbnails can make normal browser requests when displayed or opened; the extension does not proxy or fetch its own feeds.
 
 The retired React web app, account service, API routes, token helpers, manual imports, and their dependencies/tests have been removed. No application database files or database client were present, so no database migration or remote deletion was performed.
 
