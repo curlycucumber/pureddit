@@ -126,7 +126,7 @@ test('mobile navigation and composing work without horizontal overflow', async (
   await page.getByRole('link', { name: 'Popular', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'The bigger picture.' })).toBeVisible();
   await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
-  await page.locator('.header-actions').getByRole('button').first().click();
+  await page.locator('.header-actions').getByRole('button', { name: 'Create post', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);

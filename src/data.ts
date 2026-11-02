@@ -1,12 +1,13 @@
 export type Community = {
   name: string; label: string; color: string; background: string;
-  description: string; members: string; category: string;
+  description: string; members: string; category: string; redditName?: string;
 };
-export type Comment = { id: string; author: string; body: string; score: number; created: number; parent?: string };
+export type Comment = { id: string; author: string; body: string; score: number; created: number; parent?: string; redditName?: string; vote?: -1 | 0 | 1 };
 export type Post = {
   id: string; community: string; title: string; author: string; score: number;
   created: number; comments: Comment[]; commentCount: number; body?: string;
   image?: string; imagePosition?: string; flair?: string; url?: string; news?: boolean;
+  redditName?: string; vote?: -1 | 0 | 1; saved?: boolean; permalink?: string; moreComments?: boolean;
 };
 
 export const communities: Community[] = [
@@ -50,7 +51,7 @@ export const initialPosts: Post[] = [
   { id: 'news-library', community: 'news', title: 'Local libraries find new ways to bring communities together.', author: 'public_interest', score: 1126, created: hoursAgo(2), commentCount: 106, flair: 'Community', news: true, body: 'Sample news discussion: libraries are becoming places for much more than borrowing books, with workshops, shared tools, and space to connect.\n\nThis is demonstration content, not a live news report.', comments: comments('news') },
 ];
 
-export const getCommunity = (name: string) => communities.find(c => c.name === name)!;
+export const getCommunity = (name: string): Community => communities.find(c => c.name === name) || { name, label: name.slice(0, 2).toLowerCase(), color: '#637254', background: '#e8eee0', description: '', members: '—', category: 'Reddit community' };
 export function formatCount(n: number) { return n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n); }
 export function timeAgo(timestamp: number) {
   const minutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60000));
