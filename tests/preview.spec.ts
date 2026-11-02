@@ -14,7 +14,7 @@ test('preview shares the reader, supports all three targets, and never calls a b
   await page.locator('#reader-host').getByRole('link', { name: 'News', exact: true }).click();
   await expect(page.locator('#reader-host').getByRole('article')).toHaveCount(1);
   await expect(page.getByRole('heading', { name: 'r/news', exact: true })).toBeVisible();
-  await page.getByLabel('Page layout').selectOption('old');
+  await page.locator('#reader-host').getByRole('button',{name:'Old layout',exact:true}).click();
   await expect(page.locator('#reader-host').getByRole('article')).toHaveCount(1);
   expect(apiCalls).toEqual([]);
 });
@@ -47,7 +47,7 @@ test('old appearance visibly changes density and navigation, persists, and switc
   expect(modernSidebar!.x).toBeLessThan(modernPost!.x);
   await expect(reader.locator('.rank').first()).toBeHidden();
   const title=await reader.locator('.post-title').first().textContent();
-  await page.getByLabel('Page layout').selectOption('old');
+  await page.locator('#reader-host').getByRole('button',{name:'Old layout',exact:true}).click();
   const oldPost=await firstPost.boundingBox(), oldSidebar=await reader.locator('.sidebar').boundingBox();
   expect(oldPost!.height).toBeLessThan(modernPost!.height * 0.75);
   expect(oldSidebar!.x).toBeGreaterThan(oldPost!.x+oldPost!.width);
@@ -56,9 +56,9 @@ test('old appearance visibly changes density and navigation, persists, and switc
   await expect(reader.locator('.classic-navigation').getByRole('link',{name:'Popular',exact:true})).toBeVisible();
   expect((await reader.locator('.thumbnail').first().boundingBox())!.width).toBe(60);
   await expect(reader.locator('.post-title').first()).toHaveText(title!);
-  await page.reload();await expect(page.getByLabel('Page layout')).toHaveValue('old');
+  await page.reload();await expect(page.locator('#reader-host').getByRole('button',{name:'Old layout',exact:true})).toHaveAttribute('aria-pressed','true');
   await expect(reader.locator('.reader')).toHaveAttribute('data-appearance','old');
-  await page.getByLabel('Page layout').selectOption('modern');
+  await page.locator('#reader-host').getByRole('button',{name:'Modern layout',exact:true}).click();
   await expect(reader.locator('.rank').first()).toBeHidden();
   await expect(reader.locator('.sidebar').getByRole('link',{name:'Popular',exact:true})).toBeVisible();
   expect((await firstPost.boundingBox())!.height).toBe(modernPost!.height);
@@ -87,9 +87,21 @@ test('modern cards use the reference hierarchy and working menus without simulat
   await expect(reader.getByRole('status')).toContainText('Sharing is available for real posts');
 });
 
-for (const appearance of ['modern','old']) test(`${appearance} mobile community controls and accessibility work without horizontal overflow`, async ({ page }) => {
+test('preview exposes Following and For You with keyboard navigation and honest native action previews', async({page})=>{
+  await page.goto('/');const reader=page.locator('#reader-host');
+  await reader.getByRole('link',{name:'Home',exact:true}).click();
+  await expect(reader.getByRole('article')).toHaveCount(3);
+  await reader.getByRole('tab',{name:'Following',exact:true}).focus();await page.keyboard.press('ArrowRight');
+  await expect(reader.getByRole('tab',{name:'For You',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(reader.getByRole('article')).toHaveCount(7);
+  await reader.getByRole('button',{name:'Notifications',exact:true}).click();await expect(page.locator('.preview-message')).toContainText('does not connect to a Reddit account');
+  expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
+});
+
+for (const appearance of ['modern','old']) for (const colorScheme of ['light','dark']) test(`${appearance} ${colorScheme} mobile controls and accessibility work without horizontal overflow`, async ({ page }) => {
   await page.setViewportSize({ width:390,height:844 }); await page.goto('/');
-  await page.getByLabel('Page layout').selectOption(appearance);
+  await page.locator('#reader-host').getByRole('button',{name:appearance === 'old'?'Old layout':'Modern layout',exact:true}).click();
+  await page.locator('#reader-host').getByRole('button',{name:colorScheme === 'dark'?'Dark mode':'Light mode',exact:true}).click();
   await page.getByRole('button', { name:'Safari · iPhone' }).click();
   const reader=page.locator('#reader-host');
   await reader.getByRole('button',{name:'Communities',exact:true}).click();
@@ -97,6 +109,23 @@ for (const appearance of ['modern','old']) test(`${appearance} mobile community 
   await reader.getByRole('button',{name:'Communities',exact:true}).click();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
+});
+
+test('top-of-page layout and theme controls work together and persist after reload', async({page})=>{
+  await page.goto('/');const reader=page.locator('#reader-host');
+  expect((await reader.locator('.view-controls').boundingBox())!.y).toBeLessThan((await reader.locator('main h1').boundingBox())!.y);
+  await reader.getByRole('button',{name:'Old layout',exact:true}).click();
+  await reader.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await expect(reader.locator('.reader')).toHaveAttribute('data-appearance','old');
+  await expect(reader.locator('.reader')).toHaveAttribute('data-theme','dark');
+  expect(await reader.locator('main').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(17, 26, 35)');
+  await page.reload();
+  await expect(reader.getByRole('button',{name:'Old layout',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(reader.getByRole('button',{name:'Dark mode',exact:true})).toHaveAttribute('aria-pressed','true');
+  await reader.getByRole('button',{name:'Modern layout',exact:true}).click();
+  await expect(reader.locator('.reader')).toHaveAttribute('data-theme','dark');
+  await reader.getByRole('button',{name:'Light mode',exact:true}).click();
+  expect(await reader.locator('main').evaluate(node=>getComputedStyle(node).backgroundColor)).toBe('rgb(255, 255, 255)');
 });
 
 test('sample links are clearly simulated and all development packages can be downloaded', async ({ page, request }) => {

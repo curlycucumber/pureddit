@@ -1,8 +1,8 @@
-import { communityUrl, COMMUNITY, sortUrl, VERSION, type Appearance, type Page, type Post, type Preferences } from './model';
+import { communityUrl, COMMUNITY, HOME_URL, sortUrl, VERSION, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
 import type { Extraction } from './extract';
 
-export type ReaderModel = Extraction & { page: Page; preferences: Preferences; preview: boolean };
-export type ReaderActions = { original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; preview?: boolean };
+export type ReaderModel = Extraction & { page: Page; preferences: Preferences; preview: boolean; homeFeed?: HomeFeed };
+export type ReaderActions = { original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; colorScheme: (value: ColorScheme) => void; native: (action: NativeAction) => void; homeMode: (value: HomeMode) => void; more: () => void; preview?: boolean };
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, content?: string) {
   const node = document.createElement(tag); node.className = className; if (content !== undefined) node.textContent = content; return node;
 }
@@ -18,15 +18,25 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
   reader.innerHTML = `
     <a class="skip" href="#feed">Skip to posts</a>
     <header class="topbar">
-      <a class="brand" href="https://www.reddit.com/new/" aria-label="pureddit home"><span class="mark">p</span><span>pure<span class="light">ddit</span><b>.</b></span></a>
+      <button class="community-toggle" type="button" aria-label="Communities" title="Open navigation" aria-expanded="false" aria-controls="pureddit-navigation"></button>
+      <a class="brand" href="https://www.reddit.com/" aria-label="pureddit home"><span class="mark">p</span><span>pure<span class="light">ddit</span><b>.</b></span></a>
       <span class="tagline">Reddit, simplified.</span>
-      <button class="community-toggle" type="button" aria-expanded="false">Communities</button>
-      <button class="original" type="button">Show Reddit ↗</button>
+      <div class="account-actions" role="group" aria-label="Reddit account actions">
+        <button type="button" class="native-create" aria-label="Create post" title="Create a post on Reddit"></button>
+        <button type="button" class="native-notifications" aria-label="Notifications" title="Open Reddit notifications"></button>
+        <button type="button" class="native-account" aria-label="Account" title="Open your Reddit account menu"></button>
+      </div>
+      <button class="original" type="button" aria-label="Show Reddit ↗" title="Show Reddit"><span>Show Reddit ↗</span></button>
     </header>
+    <div class="view-controls" aria-label="Appearance preferences">
+      <div class="view-control"><span class="view-label">Layout</span><div class="segmented" role="group" aria-label="Page layout"><button type="button" data-appearance="modern" aria-label="Modern layout" aria-pressed="true">Modern</button><button type="button" data-appearance="old" aria-label="Old layout" aria-pressed="false">Old</button></div></div>
+      <div class="view-control"><span class="view-label">Theme</span><div class="segmented" role="group" aria-label="Color theme"><button type="button" data-color-scheme="light" aria-label="Light mode" aria-pressed="true"><span>Light</span></button><button type="button" data-color-scheme="dark" aria-label="Dark mode" aria-pressed="false"><span>Dark</span></button></div></div>
+    </div>
     <div class="classic-navigation"></div>
     <div class="layout">
-      <aside class="sidebar" aria-label="Navigation">
+      <aside class="sidebar" id="pureddit-navigation" aria-label="Navigation">
         <nav class="primary" aria-label="Feeds"></nav>
+        <button type="button" class="native-navigation">Reddit navigation &amp; subscriptions ↗</button>
         <section class="recent-section"><h2>Recently visited</h2><div class="recent"></div></section>
         <section class="shortcuts-section">
           <h2>Community shortcuts</h2><div class="pins"></div>
@@ -38,12 +48,14 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       <main id="feed" tabindex="-1">
         <div class="heading"><div><p class="source-label"></p><h1></h1></div><span class="post-count"></span></div>
         <p class="description"></p>
+        <div class="home-tabs" role="tablist" aria-label="Home feed" hidden><button type="button" role="tab" data-home-mode="following" aria-selected="true">Following</button><button type="button" role="tab" data-home-mode="for-you" aria-selected="false">For You</button></div>
+        <div class="home-feed-status" hidden><p role="status"></p><button type="button">Open Reddit’s feed controls</button></div>
         <div class="toolbar">
           <nav class="sorts" aria-label="Sort posts"></nav>
-          <select class="appearance-control" aria-label="Reading layout"><option value="modern">Modern Reddit</option><option value="old">Old Reddit</option></select>
           <span class="source-status"></span>
         </div>
-        <div class="posts"></div>
+        <div class="posts" id="pureddit-post-list"></div>
+        <button type="button" class="load-more">Load more posts</button>
         <p class="reading-note">Showing posts Reddit has loaded on this page. Use the original view to load more or manage your account.</p>
         <div class="notice" role="status" hidden></div>
       </main>
@@ -51,12 +63,31 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
   root.replaceChildren(style, reader);
   const find = <T extends Element = HTMLElement>(selector: string) => reader.querySelector<T>(selector)!;
   find('.version').textContent = `pureddit ${VERSION}`;
-  find('.original').addEventListener('click', actions.original);
-  find<HTMLSelectElement>('.appearance-control').addEventListener('change', event => {
-    actions.appearance((event.target as HTMLSelectElement).value === 'old' ? 'old' : 'modern');
+  find('.community-toggle').append(icon('menu'));
+  find('.original').append(icon('external'));
+  for (const [action, glyph] of [['create', 'plus'], ['notifications', 'bell'], ['account', 'account']] as const) {
+    const button = find(`.native-${action}`); button.append(icon(glyph)); button.addEventListener('click', () => actions.native(action));
+  }
+  find('.native-navigation').addEventListener('click', () => actions.native('navigation'));
+  find('.load-more').addEventListener('click', actions.more);
+  reader.querySelectorAll<HTMLButtonElement>('[data-appearance]').forEach(button => button.addEventListener('click', () => actions.appearance(button.dataset.appearance === 'old' ? 'old' : 'modern')));
+  reader.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach(button => {
+    button.prepend(icon(button.dataset.colorScheme === 'dark' ? 'moon' : 'sun'));
+    button.addEventListener('click', () => actions.colorScheme(button.dataset.colorScheme === 'dark' ? 'dark' : 'light'));
   });
+  find('.home-feed-status button').addEventListener('click', actions.original);
+  reader.querySelectorAll<HTMLButtonElement>('[data-home-mode]').forEach(button => button.addEventListener('click', () => actions.homeMode(button.dataset.homeMode === 'following' ? 'following' : 'for-you')));
+  find('.home-tabs').addEventListener('keydown', event => {
+    const key = (event as KeyboardEvent).key;
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key)) return;
+    event.preventDefault();
+    const current = reader.querySelector<HTMLButtonElement>('[data-home-mode][aria-selected=true]');
+    const mode = key === 'Home' ? 'following' : key === 'End' ? 'for-you' : current?.dataset.homeMode === 'following' ? 'for-you' : 'following';
+    find<HTMLElement>(`[data-home-mode="${mode}"]`).focus(); actions.homeMode(mode);
+  });
+  find('.original').addEventListener('click', actions.original);
   find('.community-toggle').addEventListener('click', event => { const button = event.currentTarget as HTMLButtonElement; const open = button.getAttribute('aria-expanded') !== 'true'; button.setAttribute('aria-expanded', String(open)); reader.dataset.communities = open ? 'open' : ''; });
-  find('.brand').addEventListener('click', event => { event.preventDefault(); actions.navigate('https://www.reddit.com/new/'); });
+  find('.brand').addEventListener('click', event => { const click = event as MouseEvent; if (click.ctrlKey || click.metaKey || click.shiftKey || click.button !== 0) return; event.preventDefault(); actions.navigate(HOME_URL); });
   find('.skip').addEventListener('click', event => { event.preventDefault(); find<HTMLElement>('#feed').focus(); });
   find<HTMLFormElement>('.pin-form').addEventListener('submit', event => {
     event.preventDefault(); const input = find<HTMLInputElement>('#community'); const name = input.value.trim().replace(/^r\//, '');
@@ -66,6 +97,12 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
     reader.querySelectorAll<HTMLDetailsElement>('.post-menu[open]').forEach(menu => {
       if (!event.composedPath().includes(menu)) menu.open = false;
     });
+    if (!find('.sidebar').contains(event.target as Node) && !find('.community-toggle').contains(event.target as Node)) {
+      reader.dataset.communities = ''; find('.community-toggle').setAttribute('aria-expanded', 'false');
+    }
+  });
+  reader.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && reader.dataset.communities === 'open') { reader.dataset.communities = ''; find('.community-toggle').setAttribute('aria-expanded', 'false'); find<HTMLElement>('.community-toggle').focus(); }
   });
   const message = (text: string) => { const notice = find<HTMLElement>('.notice'); notice.textContent = text; notice.hidden = !text; };
   let lastPosts = '';
@@ -74,7 +111,11 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       const { page, preferences, posts } = model;
       reader.dataset.appearance = preferences.appearance;
       reader.dataset.preview = String(model.preview);
-      find<HTMLSelectElement>('.appearance-control').value = preferences.appearance;
+      reader.dataset.page = page.kind;
+      reader.dataset.theme = preferences.colorScheme;
+      reader.querySelectorAll<HTMLButtonElement>('[data-appearance]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.appearance === preferences.appearance)));
+      reader.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.colorScheme === preferences.colorScheme)));
+      find<HTMLElement>('.sorts').hidden = page.kind === 'home';
       const primary = find('.primary'), sorts = find('.sorts');
       const feedLocation = find(preferences.appearance === 'old' ? '.classic-navigation' : '.sidebar');
       const sortLocation = find(preferences.appearance === 'old' ? '.classic-navigation' : '.toolbar');
@@ -85,12 +126,23 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       }
       find('h1').textContent = page.title;
       find('.source-label').textContent = model.preview ? 'EXTENSION DESIGN PREVIEW' : 'YOUR REDDIT PAGE';
-      find('.description').textContent = page.kind === 'home' ? 'Posts from the Home page you opened. Use New for chronological browsing.' : `Posts from ${page.community ? `r/${page.community}` : 'Reddit'}.`;
+      find('.description').textContent = page.kind === 'home' ? model.homeFeed?.status === 'ready' ? model.homeFeed.mode === 'following' ? 'Following: posts from the communities you follow on Reddit.' : 'For You: Reddit’s Home feed, including suggestions. Ads are hidden.' : 'Waiting for Reddit to confirm the selected Home feed.' : `Posts from ${page.community ? `r/${page.community}` : 'Reddit'}.`;
+      find<HTMLElement>('.home-tabs').hidden = page.kind !== 'home';
+      find<HTMLButtonElement>('.load-more').disabled = Boolean(model.homeFeed && model.homeFeed.status !== 'ready');
+      find<HTMLElement>('.home-feed-status').hidden = page.kind !== 'home' || model.homeFeed?.status === 'ready';
+      find('.home-feed-status p').textContent = model.homeFeed?.message || '';
+      reader.querySelectorAll<HTMLButtonElement>('[data-home-mode]').forEach(button => {
+        const active = button.dataset.homeMode === model.homeFeed?.mode;
+        button.id = `pureddit-home-${button.dataset.homeMode}`; button.setAttribute('aria-controls', 'pureddit-post-list'); button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
+      });
+      const postList = find('.posts');
+      if (page.kind === 'home') { postList.setAttribute('role', 'tabpanel'); postList.setAttribute('aria-labelledby', `pureddit-home-${model.homeFeed?.mode || 'following'}`); }
+      else { postList.removeAttribute('role'); postList.removeAttribute('aria-labelledby'); }
       find('.post-count').textContent = `${posts.length} posts`;
       find('.source-status').textContent = model.preview ? `${model.layout} · sample page` : `${model.layout === 'unsupported' ? 'Waiting for' : 'Reading'} Reddit`;
       find('.reading-note').textContent = model.preview ? 'Sample content for checking the shared extension layout. No live Reddit access is made from this preview.' : `Showing posts Reddit has loaded on this page.${model.filtered ? ` ${model.filtered} promoted or marked recommendation cards omitted.` : ''} Use Show Reddit to load more or use native account actions.`;
       primary.replaceChildren();
-      for (const [label, href, kind] of [['Home', 'https://www.reddit.com/new/', 'home'], ['Popular', 'https://www.reddit.com/r/popular/', 'popular'], ['News', 'https://www.reddit.com/r/news/', 'news']]) {
+      for (const [label, href, kind] of [['Home', HOME_URL, 'home'], ['Popular', 'https://www.reddit.com/r/popular/', 'popular'], ['News', 'https://www.reddit.com/r/news/', 'news']]) {
         const link = anchor(label, href, actions, page.kind === kind ? 'active' : ''); if (page.kind === kind) link.setAttribute('aria-current', 'page'); primary.append(link);
       }
       const recent = find('.recent'); recent.replaceChildren();
@@ -106,7 +158,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       for (const sort of ['new', 'hot', 'top']) {
         const link = anchor(sort[0].toUpperCase() + sort.slice(1), sortUrl(page, sort), actions, page.sort === sort ? 'selected' : ''); if (page.sort === sort) link.setAttribute('aria-current', 'true'); sorts.append(link);
       }
-      const signature = JSON.stringify(posts);
+      const signature = JSON.stringify([posts, model.homeFeed?.status, model.homeFeed?.mode]);
       if (lastPosts !== signature) {
         lastPosts = signature;
         const list = find('.posts'); list.replaceChildren();
@@ -208,7 +260,7 @@ async function copyLink(post: Post, actions: ReaderActions, message: (text: stri
   try { await navigator.clipboard.writeText(post.href); message('Post link copied.'); }
   catch { message('Copying is unavailable in this browser. Open the discussion to copy its address.'); }
 }
-function icon(name: 'up' | 'down' | 'comment' | 'share' | 'more' | 'external') {
+function icon(name: 'up' | 'down' | 'comment' | 'share' | 'more' | 'external' | 'menu' | 'plus' | 'bell' | 'account' | 'sun' | 'moon') {
   const paths = {
     up: 'M12 3 3 12h6v9h6v-9h6L12 3Z',
     down: 'M12 21 3 12h6V3h6v9h6l-9 9Z',
@@ -216,6 +268,12 @@ function icon(name: 'up' | 'down' | 'comment' | 'share' | 'more' | 'external') {
     share: 'M14 4v5C7 9 3 13 3 20c3-5 6-6 11-6v5l8-7.5L14 4Z',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     external: 'M14 3h7v7M21 3 10 14M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5',
+    menu: 'M4 6h16M4 12h16M4 18h16',
+    plus: 'M12 4v16M4 12h16',
+    bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M9 21h6',
+    account: 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a8 8 0 0 1 16 0v2',
+    sun: 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5',
+    moon: 'M21 13a9 9 0 0 1-10-10 9 9 0 1 0 10 10Z',
   };
   const node = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   node.classList.add('icon'); node.setAttribute('viewBox', '0 0 24 24'); node.setAttribute('fill', 'none'); node.setAttribute('stroke', 'currentColor'); node.setAttribute('stroke-width', name === 'more' ? '3.5' : '1.8'); node.setAttribute('stroke-linecap', 'round'); node.setAttribute('stroke-linejoin', 'round'); node.setAttribute('aria-hidden', 'true');

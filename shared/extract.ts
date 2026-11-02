@@ -1,6 +1,7 @@
 import { externalUrl, postUrl, type Post } from './model';
+import { isAdvertisement, isRecommendation } from './feed';
 
-export type Extraction = { posts: Post[]; filtered: number; layout: 'modern' | 'old' | 'unsupported' };
+export type Extraction = { posts: Post[]; filtered: number; excluded: string[]; layout: 'modern' | 'old' | 'unsupported' };
 const text = (value: string | null | undefined) => (value || '').replace(/\s+/g, ' ').trim();
 function flagged(element: Element, attributes: string[]) {
   return attributes.some(name => element.hasAttribute(name) && !['false', '0', 'null'].includes(element.getAttribute(name) || ''));
@@ -27,17 +28,17 @@ function createdAt(element: Element) {
   const date = new Date(numeric === undefined ? raw : numeric < 1e12 ? numeric * 1000 : numeric);
   if (Number.isFinite(date.getTime())) return date.toISOString();
 }
-export function extractPosts(root: ParentNode, base = 'https://www.reddit.com'): Extraction {
+export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean } = {}): Extraction {
   const modern = [...root.querySelectorAll('shreddit-post')];
   const old = [...root.querySelectorAll('.thing.link')];
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
-  const posts: Post[] = []; const seen = new Set<string>(); let filtered = 0;
+  const posts: Post[] = []; const excluded: string[] = []; const seen = new Set<string>(); let filtered = 0;
   for (const element of modern.length ? modern : old) {
-    if (element.matches('.promotedlink, [data-testid="ad-post"]') || flagged(element, ['promoted', 'is-promoted', 'data-promoted', 'is-recommended', 'data-recommended', 'recommendation-reason']) || element.querySelector('[slot="ad-disclosure"], [data-testid="recommendation-reason"]')) { filtered++; continue; }
-    const title = text(element.getAttribute('post-title') || element.querySelector('a.title, [slot="title"], h1, h2, h3')?.textContent);
-    const community = text(element.getAttribute('subreddit-prefixed-name') || element.getAttribute('subreddit-name') || element.getAttribute('data-subreddit')).replace(/^r\//, '');
     const href = [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
       .map(value => postUrl(value || '')).find(Boolean);
+    if (isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
+    const title = text(element.getAttribute('post-title') || element.querySelector('a.title, [slot="title"], h1, h2, h3')?.textContent);
+    const community = text(element.getAttribute('subreddit-prefixed-name') || element.getAttribute('subreddit-name') || element.getAttribute('data-subreddit')).replace(/^r\//, '');
     if (!title || !href || !community || seen.has(href)) continue;
     seen.add(href);
     posts.push({ id: element.getAttribute('id') || element.getAttribute('data-fullname') || href, title, community, href,
@@ -50,5 +51,5 @@ export function extractPosts(root: ParentNode, base = 'https://www.reddit.com'):
       externalUrl: externalUrl(element.getAttribute('content-href')) || externalUrl(element.querySelector('a.title, a[data-testid="outbound-link"], a[slot="outbound-link"]')?.getAttribute('href')),
     });
   }
-  return { posts, filtered, layout };
+  return { posts, filtered, excluded, layout };
 }

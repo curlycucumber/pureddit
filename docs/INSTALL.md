@@ -7,7 +7,7 @@ These are unsigned **development packages**, not published store releases. Keep 
 1. Download `pureddit-chrome.zip` from the Vercel preview, or run `npm ci && npm run build`.
 2. Extract the ZIP into a permanent folder. The selected folder must directly contain `manifest.json`.
 3. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select that folder (or `dist/extensions/chrome`).
-4. Open `https://www.reddit.com/r/popular/`, `https://www.reddit.com/r/news/`, or `https://www.reddit.com/new/` and allow access to Reddit if requested.
+4. Open `https://www.reddit.com/r/popular/`, `https://www.reddit.com/r/news/`, or `https://www.reddit.com/` and allow access to Reddit if requested.
 5. Use the toolbar popup to enable/disable the reader. Refresh existing Reddit tabs after installing/updating. Do not grant access to unrelated websites.
 
 Managed Chrome installations can prohibit unpacked extensions. That is an administrator restriction; use an authorized personal/development browser or an approved published distribution rather than changing managed policy.
@@ -41,7 +41,17 @@ If the repository is already on your Mac, use that checkout and update it with `
 
 `safari:prepare` builds the extension, checks that full Xcode and the iOS SDK are available, and runs Apple's `safari-web-extension-converter` to generate a Swift wrapper project under `build/safari`. Finder opens the generated folder with the final command; open the `.xcodeproj` inside it. Full Xcode is required; Command Line Tools alone do not supply the required tools.
 
-The converter refuses to overwrite an existing generated project, preserving any signing/native changes. To generate a separate wrapper after rebuilding, run `bash scripts/convert-safari.sh build/safari-another`. Its copied extension resources reflect the build at conversion time; a subsequent web-source build does not update the existing Xcode project's copied resources automatically. Re-copy the built extension resources into the corresponding extension Resources folder, or generate a separate wrapper.
+The converter refuses to overwrite an existing generated project, preserving any signing/native changes. To generate a separate wrapper after rebuilding, run `bash scripts/convert-safari.sh build/safari-another`. Its copied extension resources reflect the build at conversion time; a subsequent web-source build does not update the existing Xcode project's copied resources automatically.
+
+After source updates, refresh the resources in your existing wrapper without replacing signing settings:
+
+```sh
+git pull --ff-only
+npm ci
+npm run safari:sync
+```
+
+For a custom wrapper location use `npm run safari:sync -- build/safari-another`. The sync requires a generated Xcode project with matching Pureddit resource manifests and updates only extension resources. Then rebuild/run the iOS app in Xcode and refresh existing Reddit tabs on your iPhone. Do not run the converter over a signed/configured project merely to update its JavaScript.
 
 To choose your own identifier before generating the project, run `PUREDDIT_BUNDLE_ID=com.yourname.pureddit npm run safari:prepare`, replacing `yourname` with your own identifier component.
 
@@ -72,7 +82,11 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Test both `www.reddit.com` and `old.reddit.com` feeds while signed in and signed out.
 - Confirm native Reddit has loaded posts before comparing the reading view.
 - Confirm title/thumbnail accuracy, filters, and New/Hot/Top navigation.
-- Switch Reading layout between Modern Reddit and Old Reddit; confirm compact rows and a right sidebar on desktop, mobile Communities access, and persistence after refreshing. The preview uses its outer Page layout control for the same choice.
+- On signed-in modern Reddit Home, confirm Following is actually selected in Reddit, switch For You and back, and verify the URL can stay the same. Home must not display posts under Following if the native tab cannot be verified. Signed-out and old Reddit Home may require opening modern Reddit/signing in first.
+- Check recognized ads remain hidden on Home/Popular/News and when Show Reddit is active. Disable the extension and confirm its injected styles and interaction restrictions are removed.
+- Check the hamburger dropdown and its native navigation/subscriptions action, Create post, Notifications, and Account. Native account controls must remain usable until you choose Reading view again; no popup should display invented account information.
+- Use Load more posts; check the native feed adds cards, or use Show Reddit if its loader requires another action. Scroll long feeds to check native virtualization does not erase the entire reading view.
+- Use Modern/Old and Light/Dark in the shared control bar below the header. Check all four combinations, compact classic rows/right sidebar on desktop, mobile Communities access, and persistence after refreshing. The same controls are present inside the Vercel preview.
 - Add/remove a local shortcut and visit six communities; only five recents should remain.
 - Choose Show Reddit, use a normal native account control, then return with Reading view.
 - Open a post; its discussion should stay native. Navigate back to a feed.

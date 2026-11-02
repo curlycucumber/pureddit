@@ -17,6 +17,9 @@ test('local preferences validate and deduplicate names without retaining arbitra
   assert.equal(normalizePreferences({appearance:'old'}).appearance, 'old');
   assert.equal(normalizePreferences({appearance:'unsupported'}).appearance, 'modern');
   assert.equal(normalizePreferences({pins:['books']}).appearance, 'modern');
+  assert.equal(normalizePreferences({colorScheme:'dark'}).colorScheme, 'dark');
+  assert.equal(normalizePreferences({colorScheme:'invalid'}).colorScheme, 'light');
+  assert.equal(normalizePreferences({appearance:'old'}).colorScheme, 'light');
 });
 test('recent communities are unique, chronological, and limited to five', () => {
   let value = normalizePreferences(DEFAULTS);

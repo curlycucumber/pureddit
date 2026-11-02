@@ -2,7 +2,7 @@ import { loadPreferences, savePreferences } from './storage';
 const enabled = document.querySelector<HTMLInputElement>('#enabled')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 enabled.disabled = true;
-loadPreferences().then(value => { enabled.checked = value.enabled; enabled.disabled = false; }).catch(() => { status.textContent = 'Browser storage is unavailable. Please reopen this popup.'; });
+loadPreferences().then(value => { enabled.checked = value.enabled; enabled.disabled = false; document.documentElement.dataset.theme = value.colorScheme; }).catch(() => { status.textContent = 'Browser storage is unavailable. Please reopen this popup.'; });
 enabled.addEventListener('change', async () => {
   enabled.disabled = true;
   try { const value = await loadPreferences(); await savePreferences({ ...value, enabled: enabled.checked }); status.textContent = enabled.checked ? 'Reading view enabled on Reddit feed pages.' : 'Reddit’s original view restored.'; }

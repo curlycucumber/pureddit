@@ -1,9 +1,14 @@
 export type Appearance = 'modern' | 'old';
-export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; pins: string[]; recent: string[] };
+export type ColorScheme = 'light' | 'dark';
+export type HomeMode = 'following' | 'for-you';
+export type NativeAction = 'create' | 'notifications' | 'account' | 'navigation';
+export type HomeFeed = { mode: HomeMode; status: 'ready' | 'switching' | 'unavailable'; message?: string };
+export const HOME_URL = 'https://www.reddit.com/';
+export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
 export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
-export const VERSION = '0.2.2';
-export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', pins: [], recent: [] };
+export const VERSION = '0.3.0';
+export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [] };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 
 export function normalizePreferences(value: unknown): Preferences {
@@ -16,7 +21,7 @@ export function normalizePreferences(value: unknown): Preferences {
     }
     return result;
   };
-  return { version: 1, enabled: object.enabled !== false, appearance: object.appearance === 'old' ? 'old' : 'modern', pins: names(object.pins, 50), recent: names(object.recent, 5) };
+  return { version: 1, enabled: object.enabled !== false, appearance: object.appearance === 'old' ? 'old' : 'modern', colorScheme: object.colorScheme === 'dark' ? 'dark' : 'light', pins: names(object.pins, 50), recent: names(object.recent, 5) };
 }
 export function visit(preferences: Preferences, name: string): Preferences {
   if (!COMMUNITY.test(name) || /^(popular|all)$/i.test(name)) return preferences;
