@@ -81,9 +81,12 @@ Without a connected account, bundled sample posts and the `u/you` identity remai
 npm run build
 npm test
 # Or independently:
+npm run test:deployment
 npm run test:server
 npm run test:browser -- --workers=3
 ```
+
+The deployment suite compiles API handlers to JavaScript and cold-loads them in native Node without a TypeScript loader, reproducing Vercel’s module resolution. The `rewriteRelativeImportExtensions` compiler setting is required so `.ts` source imports become deployed `.js` imports. Local Vite success alone does not verify this.
 
 The server suite tests OAuth redirects, state rejection, token exchange/refresh/revocation, cookie encryption, session expiry, request-origin checks, bounded API operations, subscription-only Home filtering, and normalized responses. Provider responses are stubbed; tests do not access or change real Reddit accounts.
 

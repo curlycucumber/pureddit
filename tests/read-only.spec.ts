@@ -69,3 +69,17 @@ test('the existing app links to Read Only and browser back returns to it', async
   await page.goBack();
   await expect(page.getByRole('heading', { name: 'Read Only', exact: true })).toBeVisible();
 });
+
+test('HTML platform failures identify the feed endpoint and HTTP status without claiming an account error', async ({ page }) => {
+  await page.route('**/api/read-only?**', route => route.fulfill({
+    status: 500, contentType: 'text/html', headers: { 'x-vercel-error': 'FUNCTION_INVOCATION_FAILED' },
+    body: '<html><body>Internal platform error. Private diagnostic text.</body></html>',
+  }));
+  await page.goto('/#/read-only');
+  await expect(page.getByRole('alert')).toContainText('feed endpoint');
+  await expect(page.getByRole('alert')).toContainText('HTTP 500');
+  await expect(page.getByRole('alert')).toContainText('FUNCTION_INVOCATION_FAILED');
+  await expect(page.getByRole('alert')).not.toContainText('account service');
+  await expect(page.getByRole('alert')).not.toContainText('Private diagnostic text');
+  await expect(page.getByRole('article')).toHaveCount(0);
+});

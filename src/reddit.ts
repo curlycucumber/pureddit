@@ -6,9 +6,15 @@ export async function api<T>(resource: string, parameters: Record<string, string
 }
 export async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options });
+  const service = path.startsWith('/api/auth/') ? 'account' : 'feed';
   let data;
-  try { data = await response.json(); } catch { throw new Error('The account service is unavailable. Please try again.'); }
-  if (!response.ok) throw new Error(data.error || 'Reddit could not complete this request.');
+  try { data = await response.json(); } catch {
+    const platformError = response.headers.get('x-vercel-error');
+    const code = platformError && /^[A-Z_]{3,80}$/.test(platformError) ? `; ${platformError}` : '';
+    throw new Error(`The ${service} endpoint returned a non-JSON response (HTTP ${response.status}${code}). This may be a deployment or server error. Please refresh after the latest deployment or check the Vercel function logs.`);
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error(`The ${service} endpoint returned an unexpected response (HTTP ${response.status}). Please try again.`);
+  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : `The ${service} request failed (HTTP ${response.status}). Please try again.`);
   return data as T;
 }
 export function action<T = { success: boolean }>(input: Record<string, unknown>) {
