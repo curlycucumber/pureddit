@@ -1,0 +1,52 @@
+name: Build and test Pureddit
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      safari_project:
+        description: Generate the Safari Xcode wrapper on a macOS runner
+        required: false
+        default: false
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  extension-and-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PUREDDIT_TEST_FIREFOX: '1'
+      XDG_CONFIG_HOME: /tmp/pureddit-webext-config
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox
+      - run: npm test
+      - run: npm run lint:extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pureddit-development-packages
+          path: dist/downloads/*.zip
+  safari-project:
+    if: github.event_name == 'workflow_dispatch' && inputs.safari_project
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: bash scripts/convert-safari.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pureddit-safari-xcode-source
+          path: build/safari

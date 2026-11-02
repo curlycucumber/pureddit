@@ -1,35 +1,26 @@
 {
   "name": "pureddit",
+  "version": "0.2.0",
   "private": true,
-  "version": "0.1.0",
   "type": "module",
+  "engines": { "node": "24.x" },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-extensions.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "npm run test:deployment && npm run test:server && npm run test:browser",
-    "test:deployment": "node --test tests/deployment.test.mjs",
-    "test:server": "tsx --test tests/server.test.ts tests/headline-import.test.ts",
-    "test:browser": "playwright test"
-  },
-  "dependencies": {
-    "@fontsource/dm-sans": "^5.3.0",
-    "@fontsource/manrope": "^5.3.0",
-    "lucide-react": "^0.577.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "test": "npm run build && node --import tsx --test tests/model.test.ts tests/packaging.test.mjs && playwright test",
+    "test:browser": "playwright test",
+    "lint:extension": "web-ext lint --source-dir dist/extensions/firefox --warnings-as-errors"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "1.64.1",
     "@types/node": "^24.0.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@vitejs/plugin-react": "^6.0.0",
+    "esbuild": "0.28.2",
+    "fflate": "0.8.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vite": "8.3.5"
+    "vite": "8.3.5",
+    "web-ext": "10.8.0"
   }
 }

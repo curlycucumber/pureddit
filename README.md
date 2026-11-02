@@ -1,107 +1,77 @@
 # Pureddit
 
-Reddit, with room to breathe. A responsive React and TypeScript client with a subscription-only Home feed, separate Popular and News feeds, and a compact interface inspired by old.reddit.com.
+A compact reading view for Reddit, packaged as a WebExtension. The Vercel website is now an **extension design preview with sample content**, not a Reddit API client.
 
-## Run locally
+The preview and the Firefox, Chrome, and Safari packages use the same DOM adapter, renderer, and stylesheet in `shared/`. The visible logo stays lowercase **pureddit**.
 
-Use Node.js 24 (see `.nvmrc`).
+## What runs where
+
+| Location | Purpose |
+| --- | --- |
+| GitHub | Source, tests, build workflow, and downloadable development artifacts |
+| Vercel | Static desktop/iPhone-sized design preview and development ZIP downloads |
+| Chrome / Firefox desktop | Reading view on Reddit feed pages the user opens |
+| Safari on iPhone | The same WebExtension source, inside an Xcode-generated and signed Apple wrapper |
+
+Vercel does not run the extension inside Reddit. Choosing Safari in the preview changes the viewport; it does not emulate Safari or verify installation on an iPhone.
+
+## Development
+
+Use Node.js 24, then:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-The development server uses port 5173 and includes the same API handlers used on Vercel. Without OAuth settings, you can explore the separate, browser-local demo. In the Codex cloud workspace use `npm ci --cache /tmp/pureddit-npm-cache` to keep npm's cache writable.
-
-```sh
-npm run build
-npm run preview
-```
-
-Preview also serves the API handlers locally. It does not validate Vercel's deployment infrastructure. For local OAuth testing, register the actual local callback origin/port and set matching values in an ignored `.env.local`; copy the field names from `.env.example`. Local HTTP callbacks are accepted only for localhost or 127.0.0.1. Never use production credentials on untrusted preview URLs.
-
-## Deploy and enable Reddit sign-in
-
-Connect `curlycucumber/PUREDDIT` to Vercel with `main` as the production branch and the repository root as the root directory. `vercel.json` specifies Vite, `npm ci`, `npm run build`, and the `dist` output directory. Vercel deploys the `api/` TypeScript functions alongside the frontend.
-
-1. Obtain the Reddit API access/approval required for your use case and register an OAuth **web app**, not a script app, through Reddit's current developer process. Reddit may restrict app creation and API use; implementing OAuth does not grant approval.
-2. Register this exact redirect URI in the Reddit app:
-
-   ```text
-   https://pureddit.vercel.app/api/auth/callback
-   ```
-
-3. In **Vercel → Project → Settings → Environment Variables**, add the following server-only values to **Production**. Do not put secrets in chat, Git, or any `VITE_` variable.
-
-   | Variable | Value |
-   | --- | --- |
-   | `REDDIT_CLIENT_ID` | The OAuth web app's client ID |
-   | `REDDIT_CLIENT_SECRET` | The OAuth web app's client secret |
-   | `REDDIT_REDIRECT_URI` | `https://pureddit.vercel.app/api/auth/callback` |
-   | `SESSION_SECRET` | A unique cryptographically random secret, at least 32 bytes; generate with `openssl rand -hex 32` |
-   | `REDDIT_USER_AGENT` | A descriptive Reddit API user agent, e.g. `web:pureddit:0.2.0 (by /u/YOUR_REDDIT_USERNAME)` |
-
-4. Redeploy the Vercel project after saving the variables. These are **Vercel runtime settings**; adding variables to a Codex cloud workspace does not configure Vercel.
-5. Choose **Sign in with Reddit → Continue to Reddit**, authorize on Reddit's website, and return to Pureddit. Verify your username, communities, Home feed, saved posts, and profile. Check a reversible vote before intentionally posting content. Authorization and account writes could not be verified against a real account during development because credentials were unavailable.
-
-For a custom domain, update both the registered Reddit redirect and `REDDIT_REDIRECT_URI` to the same exact origin and callback path. Preview deployments need a separately registered callback and appropriate preview credentials. Production cookies are host-only, Secure, HttpOnly, and SameSite=Lax.
-
-## Connected account behavior
-
-### Read Only test page
-
-Open `https://pureddit.vercel.app/#/read-only` or choose **Read Only** in the sidebar. **Paste headlines** is the default: open Reddit normally, select/copy visible post titles or page text, paste it into the editor, and choose Extract headlines. Processing stays in the tab; no API/session/Reddit requests are made in paste mode. Rich clipboard selections can preserve original Reddit post links; plain text uses a clearly labeled Reddit search link when no original link is supplied. No post URLs, authors, scores, or posting times are invented. Extraction is heuristic: review the list and remove misidentified lines. Popular and News have separate in-memory drafts/imports; Clear affects only the selected feed, and reloading discards both. Pasted HTML is parsed in an inert template, never inserted into the page; embedded scripts/media are not executed or loaded. Input is capped at 200,000 text characters, rich HTML at 1 MB (larger HTML falls back to text), and imports at 200 titles.
-
-**Live feeds** remains an explicit opt-in test, also reachable at `#/read-only?mode=live`. This separate mode fetches only `r/popular` and `r/news`, with Hot/New/Top sorting and cursor pagination. Titles open the original discussion on Reddit. It makes no session request, sends no account cookies, and has no sign-in, voting, commenting, saving, or submission controls. The dedicated `/api/read-only` endpoint accepts GET only. When `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are configured on the server, it uses Reddit’s app-only OAuth client-credentials flow and `oauth.reddit.com`. Visitors do not authorize a Reddit account; this mode needs neither `SESSION_SECRET` nor `REDDIT_REDIRECT_URI`. It does require Reddit’s approval for the application. Set a descriptive `REDDIT_USER_AGENT` identifying your app/developer. With neither client credential configured, it uses the public JSON test path; configuring only one is an explicit error. Reddit can still block or rate-limit these reads; an error and external Reddit link are shown instead of sample posts. The page does not bypass API access requirements. Subreddit following is not part of this initial two-feed experiment. App tokens are kept only in server memory until near expiry and never returned to the browser or stored on disk. Concurrent requests share token acquisition, and rotating credentials changes the token cache identity. Authorization failures are reported without switching to a different host or public fallback. Add credentials securely in Vercel’s Production environment and redeploy; merely having an OAuth client ID does not establish approved API access.
-
-- **Account:** Reddit OAuth authorization-code flow, profile username/karma/account age, automatic access-token refresh, and sign-out with token revocation. Pureddit never collects your Reddit password.
-- **Home:** newest posts by default, filtered on the server against the complete returned subscription list. Empty subscriptions do not fall back to default or recommended communities. Promoted posts are removed.
-- **Popular:** Reddit's popular listing. **News:** `r/news`, not Reddit's proprietary News tab. Both pages fetch live listings while signed out through Reddit's public JSON endpoints, and use OAuth when signed in. Public access can be blocked or rate-limited by Reddit; errors are shown without substituting demo posts. Reading public post discussions works without sign-in; account actions still require authorization.
-- **Sorting:** Reddit New/Hot/Top (Top uses the past week). No client-side recommendation system. Listing cursors provide a Load more posts button.
-- **Communities:** real subscriptions, searchable discovery, join/leave actions, individual feeds, and five unique recently visited communities. Recents are stored separately per account in browser storage; Reddit subscriptions remain on Reddit.
-- **Posts:** live discussions, Markdown, reversible votes, save/unsave, text/link submission, deletion of your own posts/comments, your submitted-post listing, and original Reddit share links.
-- **Comments:** fetched comment trees and nested replies, live submission and voting. The first returned tree is limited to 100 comments; omitted/continued threads link to the complete Reddit discussion.
-- **Errors:** failed writes never silently become local demo actions. Authorization failures and rate limits display meaningful errors. Signed-in content and tokens are not persisted in localStorage.
-
-This is a focused Reddit client, not full feature parity with Reddit's apps. Image/video uploads, inbox/chat, moderation tools, inline editing, saved comments, and expansion of omitted comment trees are not implemented. Use the full Reddit profile/discussion links for those workflows. Listing endpoints follow Reddit's access controls, policies, and rate limits. Very large subscription lists are bounded at 30 pages (up to 3,000 communities) and fail explicitly if they cannot be loaded completely.
-
-## Sessions and security
-
-`api/auth/[action].ts` handles authorization, callback, session status, and logout. `api/reddit.ts` exposes a fixed set of authenticated operations; it cannot proxy arbitrary URLs. Tokens are encrypted with AES-256-GCM in an HttpOnly cookie and are never returned to frontend JavaScript. No separate database is needed: Reddit stores connected account actions. A session lasts at most 30 days and requires reauthorization afterward. Rotating `SESSION_SECRET` invalidates existing encrypted sessions; users must reconnect. Do not log cookies or token responses.
-
-OAuth state is random, encrypted, bound to the browser cookie, and expires in 10 minutes. Writes require a matching configured Origin, a custom request header, and JSON content type. API responses disable caching. Markdown skips raw HTML and uses safe link handling.
-
-Requested scopes: `identity read mysubreddits vote submit edit subscribe save history`. No moderation, private-message, or chat permissions are requested. Sign-out attempts to revoke the Reddit refresh token and always clears the local session when the request succeeds; if Reddit is unavailable, the UI explains how to revoke access from Reddit's app settings.
-
-## Demo mode
-
-Without a connected account, bundled sample posts and the `u/you` identity remain available. Demo votes, posts, subscriptions, comments, and bookmarks stay in `pureddit:v1` in browser local storage and never migrate into Reddit. Clear that key to reset the demo. Sample scores and comment totals are illustrative. A link to a demo-created post cannot transfer its content to another browser. Browser storage failure allows in-memory demo use with a notice.
-
-## Validation
+Open the local Vite server to review the shared UI. In the Codex cloud workspace, use `npm ci --cache /tmp/pureddit-npm-cache` if the default npm cache is not writable.
 
 ```sh
 npm run build
 npm test
-# Or independently:
-npm run test:deployment
-npm run test:server
-npm run test:browser -- --workers=3
+npm run lint:extension
 ```
 
-The deployment suite compiles API handlers to JavaScript and cold-loads them in native Node without a TypeScript loader, reproducing Vercel’s module resolution. The `rewriteRelativeImportExtensions` compiler setting is required so `.ts` source imports become deployed `.js` imports. Local Vite success alone does not verify this.
+`npm run build` type-checks, builds the Vercel preview, and generates:
 
-The server suite tests OAuth redirects, state rejection, token exchange/refresh/revocation, cookie encryption, session expiry, request-origin checks, bounded API operations, subscription-only Home filtering, and normalized responses. Provider responses are stubbed; tests do not access or change real Reddit accounts.
+```text
+dist/extensions/chrome/
+dist/extensions/firefox/
+dist/extensions/safari/
+dist/downloads/pureddit-chrome.zip
+dist/downloads/pureddit-firefox.zip
+dist/downloads/pureddit-safari.zip
+```
 
-Playwright tests cover the demo and simulated signed-in workflows, including account screens, pagination, votes, saves, subscriptions, comments/replies, submissions, failed API actions, sign-out, mobile layout, accessibility, and invalid routes. It starts/reuses the development server. It uses `/usr/bin/chromium` when present; otherwise run `npx playwright install chromium`. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for another installed Chromium executable.
+`npm test` rebuilds packages before model/packaging tests and Playwright browser checks. `npm run preview` serves the production preview and its generated downloads.
 
-## Project structure
+[Installation and Safari packaging](docs/INSTALL.md) · [Architecture and limitations](docs/ARCHITECTURE.md)
 
-- `src/App.tsx`: screens, navigation, demo state, and connected interactions.
-- `src/reddit.ts`: same-origin API client and account/session state.
-- `src/data.ts`: shared view types and sample data.
-- `server/`: encrypted session helpers, Reddit HTTP requests, and normalization.
-- `api/`: Vercel Node functions, also used by the local Vite middleware.
-- `tests/`: backend/security checks and Playwright browser workflows.
-- `public/images/`: locally bundled sample photography and source notices.
+## Reading behavior
 
-Demo fonts/images are served locally; live post images come from Reddit-provided HTTPS URLs. DM Sans and Manrope use the SIL Open Font License via Fontsource; licenses ship with the installed packages. Lucide icons use the ISC license.
+- Supports modern `shreddit-post` cards and old Reddit `.thing.link` cards, using only content already present on the opened page.
+- Home opens Reddit's chronological `/new/` page. Reddit determines the feed using the browser's existing account session. Popular opens `/r/popular/`, News opens `/r/news/`.
+- Provides New/Hot/Top navigation, native post/comment links, Reddit-provided thumbnails, local community shortcuts, and five recent communities. Explicitly marked NSFW/spoiler cards keep their image previews hidden.
+- Omits explicitly marked promoted/recommendation cards. Unmarked recommendations cannot be reliably identified. This is not a guarantee about Reddit's feed selection.
+- `Show Reddit` restores the original page and controls. The floating `Reading view` button returns to Pureddit. This is also how to load more native content: browse/scroll the original page, then return to the reading view.
+- Discussion, profile, inbox, login, settings, wiki, and other non-feed pages remain in Reddit's native interface. Voting, commenting, posting, and Reddit subscription management happen there, not in a simulated Pureddit account.
+- The extension popup enables/disables the reader and clears local shortcuts/recents. Shortcut changes do not follow/unfollow a subreddit on Reddit.
+- If Reddit has not loaded supported cards, the reader shows an explicit empty/unsupported-layout message and offers the original view. Reddit login gates and access restrictions remain in place.
+
+## Data and migration
+
+There is **no backend, database, OAuth, token exchange, or Reddit API request** in this version. Extension state is limited to enabled status, shortcut names, and five recent community names in `storage.local`. It is not transmitted. Reddit text and thumbnails are read from the current page, not persisted by the extension. Links and existing thumbnails can make normal browser requests when displayed or opened; the extension does not proxy or fetch its own feeds.
+
+The retired React web app, account service, API routes, token helpers, manual imports, and their dependencies/tests have been removed. No application database files or database client were present, so no database migration or remote deletion was performed.
+
+The preview stores only its own local settings under `pureddit:preview:v2`; it removes the old `pureddit:v1` and `pureddit:recent:*` demo records while preserving unrelated site data. Preview state is separate from installed extension preferences. Any old Vercel `REDDIT_*` or `SESSION_SECRET` variables are unused and can be removed from Vercel project settings. Old browser cookies, if any, are not used; clear site data to remove them. No credentials are included in the packages.
+
+## Validation and remaining checks
+
+Automated checks cover URL/permission boundaries, storage normalization, promotion markers, malicious post text/URLs, modern/old DOM fixtures, dynamic post updates, original-view restoration, popup interactions with simulated WebExtension storage, mobile overflow, accessibility, and package completeness.
+
+The bundled content/popup scripts run in a **browser harness with simulated extension storage**. This is meaningful behavior testing, not an installed-extension test. This cloud machine's managed Chromium explicitly disallows unpacked-extension loading. The Firefox test-browser download is also blocked by its network policy. Firefox source is checked with Mozilla's `web-ext lint`; an actual Firefox install has not been verified here. Safari/iPhone build, signing, and device validation require macOS/Xcode and have not been performed here. Real Reddit layouts must still be checked on the user's browsers; fixture tests cannot establish live-site compatibility.
+
+The GitHub workflow runs the build, tests, and Firefox validator. On GitHub-hosted runners it can additionally test the preview/harness in the Firefox engine. Optional manual Safari-project generation runs on macOS; that workflow must succeed before claiming an Xcode project has been produced. Store signing/submission and iPhone installation are separate steps requiring the owner's accounts.
+
+Sample photography in the Vercel preview retains its notices in `public/images/`. It is not included in extension packages.

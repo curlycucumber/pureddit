@@ -7,3 +7,7 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+build/
+web-ext-artifacts/
+.DS_Store
