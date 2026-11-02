@@ -7,10 +7,23 @@ fi
 if ! xcodebuild -version >/dev/null 2>&1; then
   echo "Full Xcode is not ready or selected. Open Xcode and complete setup, then run:" >&2
   echo "  sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer" >&2
+  echo "  sudo xcodebuild -runFirstLaunch" >&2
+  exit 1
+fi
+if ! xcodebuild -checkFirstLaunchStatus >/dev/null 2>&1; then
+  echo "Xcode still needs its first-launch components. Quit Xcode and run:" >&2
+  echo "  sudo xcodebuild -runFirstLaunch" >&2
   exit 1
 fi
 if ! xcrun --sdk iphoneos --show-sdk-path >/dev/null 2>&1; then
   echo "The iOS SDK is unavailable. Complete Xcode's iOS platform/component setup before continuing." >&2
+  exit 1
+fi
+if ! xcrun simctl list devices >/dev/null 2>&1; then
+  echo "Xcode's CoreSimulator support is unavailable. Quit Xcode and run:" >&2
+  echo "  sudo xcodebuild -runFirstLaunch" >&2
+  echo "Then verify: xcrun simctl list devices" >&2
+  echo "If that still fails, finish Xcode's platform setup or repair/reinstall Xcode before retrying." >&2
   exit 1
 fi
 task_root="$(cd "$(dirname "$0")/.." && pwd)"

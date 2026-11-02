@@ -24,6 +24,142 @@ main{overflow:auto;min-width:0;padding:28px 30px;background:#fff;outline:none}.h
 }
 .reader[data-preview=true] .appearance-control { display: none; }
 
+.community-avatar, .post-controls, .source-link, .vote-pill, .share-post, .icon { display: none; }
+.reader[data-appearance=modern] .posts { border: 0; border-radius: 0; overflow: visible; }
+.reader[data-appearance=modern] .post {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  grid-template-areas: "meta meta" "title media" "source media" "actions actions";
+  align-items: start;
+  gap: 10px 24px;
+  padding: 20px 0 24px;
+  border-bottom: 1px solid #dce3e9;
+  position: relative;
+}
+.reader[data-appearance=modern] .post:last-child { border-bottom: 0; }
+.reader[data-appearance=modern] .post:hover { background: #fff; }
+.reader[data-appearance=modern] .post[data-media=none] {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "meta" "title" "source" "actions";
+}
+.reader[data-appearance=modern] .post-content { display: contents; }
+.reader[data-appearance=modern] .meta {
+  grid-area: meta;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin: 0 0 2px;
+  min-width: 0;
+  font-size: 12px;
+  color: #566c7b;
+}
+.reader[data-appearance=modern] .community-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid #c3d7ea;
+  border-radius: 50%;
+  overflow: hidden;
+  color: #24537e;
+  background: #e7f0f9;
+  font-size: 13px;
+  font-weight: 600;
+}
+.community-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.reader[data-appearance=modern] .subreddit {
+  color: #304653;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.reader[data-appearance=modern] .post-time { white-space: nowrap; font-size: 11px; }
+.reader[data-appearance=modern] .post-author { display: none; }
+.reader[data-appearance=modern] .post-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+.reader[data-appearance=modern] .join-community {
+  background: #194b7c;
+  color: #fff;
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.reader[data-appearance=modern] .join-community:hover { background: #123c65; text-decoration: none; }
+.reader[data-appearance=modern] .post h2 { grid-area: title; font-size: 22px; font-weight: 600; line-height: 1.35; letter-spacing: -.3px; }
+.reader[data-appearance=modern] .post-title { color: #202b33; }
+.reader[data-appearance=modern] .post-title:hover { color: #0756a6; text-decoration: none; }
+.reader[data-appearance=modern] .source-link {
+  display: block;
+  grid-area: source;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #0756a6;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.reader[data-appearance=modern] .source-link:hover { text-decoration: underline; }
+.reader[data-appearance=modern] .thumbnail { grid-area: media; width: 148px; height: 112px; margin: 0; border-radius: 10px; position: relative; }
+.reader[data-appearance=modern] .post[data-media=none] .thumbnail { display: none; }
+.external-badge { display: none; }
+.reader[data-appearance=modern] .external-badge { display: block; position: absolute; right: 6px; bottom: 6px; border-radius: 6px; padding: 5px; background: #17314fdd; color: white; }
+.reader[data-appearance=modern] .details { grid-area: actions; display: flex; align-items: center; gap: 10px; margin: 8px 0 0; }
+.reader[data-appearance=modern] .details .post-points,
+.reader[data-appearance=modern] .comment-label,
+.reader[data-appearance=modern] .native-note { display: none; }
+.reader[data-appearance=modern] .action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 0;
+  border-radius: 24px;
+  color: #263e50;
+  background: #e9eff4;
+  font: 600 13px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  white-space: nowrap;
+}
+.reader[data-appearance=modern] .action-pill:hover { color: #194b7c; background: #dce9f5; text-decoration: none; }
+.reader[data-appearance=modern] .icon { display: block; width: 19px; height: 19px; flex-shrink: 0; }
+.reader[data-appearance=modern] .external-badge .icon { width: 14px; height: 14px; }
+.post-menu { position: relative; }
+.post-menu summary { display: flex; align-items: center; justify-content: center; cursor: pointer; list-style: none; width: 30px; height: 30px; color: #304653; border-radius: 50%; }
+.post-menu summary::-webkit-details-marker { display: none; }
+.post-menu summary:hover { background: #e9eff4; }
+.post-menu summary:focus-visible { outline: 2px solid #0756a6; outline-offset: 2px; }
+.post-menu-content { position: absolute; top: calc(100% + 6px); right: 0; width: 230px; z-index: 3; background: #fff; border: 1px solid #d1dce6; border-radius: 8px; box-shadow: 0 5px 20px #20354820; padding: 5px; }
+.post-menu-content a, .post-menu-content button { display: block; width: 100%; border: 0; border-radius: 4px; padding: 9px 10px; text-align: left; color: #304653; background: #fff; font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+.post-menu-content a:hover, .post-menu-content button:hover { background: #edf4fb; }
+
+@container reader (max-width: 680px) {
+  .reader[data-appearance=modern] .post { grid-template-columns: minmax(0, 1fr) 96px; gap: 9px 14px; padding: 18px 0 20px; }
+  .reader[data-appearance=modern] .post h2 { font-size: 18px; }
+  .reader[data-appearance=modern] .thumbnail { width: 96px; height: 80px; border-radius: 8px; }
+  .reader[data-appearance=modern] .source-link { font-size: 12px; }
+}
+@container reader (max-width: 500px) {
+  .reader[data-appearance=modern] .post { grid-template-columns: minmax(0, 1fr) 80px; gap: 8px 12px; }
+  .reader[data-appearance=modern] .post h2 { font-size: 17px; }
+  .reader[data-appearance=modern] .thumbnail { width: 80px; height: 74px; }
+  .reader[data-appearance=modern] .meta { gap: 6px; font-size: 11px; }
+  .reader[data-appearance=modern] .community-avatar { width: 24px; height: 24px; font-size: 11px; }
+  .reader[data-appearance=modern] .post-time { font-size: 10px; }
+  .reader[data-appearance=modern] .post-controls { gap: 4px; }
+  .reader[data-appearance=modern] .join-community { padding: 5px 10px; font-size: 11px; }
+  .reader[data-appearance=modern] .post-menu summary { width: 24px; height: 28px; }
+  .reader[data-appearance=modern] .details { gap: 8px; margin-top: 5px; }
+  .reader[data-appearance=modern] .action-pill { font-size: 12px; padding: 8px 11px; }
+}
+
 /* Classic appearance is independent of the native Reddit markup being read. */
 .reader[data-appearance=old] { font-family: Verdana, Arial, sans-serif; }
 .reader[data-appearance=old] .topbar {

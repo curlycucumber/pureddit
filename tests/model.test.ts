@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, normalizePreferences, pageFromUrl, postUrl, sortUrl, visit } from '../shared/model';
+import { DEFAULTS, externalUrl, normalizePreferences, pageFromUrl, postUrl, sortUrl, visit } from '../shared/model';
 
 test('only supported Reddit feed URLs activate the reader; discussions and private pages stay native', () => {
   assert.equal(pageFromUrl('https://www.reddit.com/new/')?.kind, 'home');
@@ -27,4 +27,9 @@ test('recent communities are unique, chronological, and limited to five', () => 
 test('post links cannot point at another site, run script, or expose URL credentials', () => {
   assert.equal(postUrl('/r/news/comments/abc123/title/?tracking=1'), 'https://www.reddit.com/r/news/comments/abc123/title/');
   for (const url of ['javascript:alert(1)', 'https://evil.invalid/comments/abc123/', 'https://reader:secret@www.reddit.com/comments/abc123/', '/login/']) assert.equal(postUrl(url), undefined);
+});
+
+test('outbound source links accept web destinations without scripts or embedded credentials', () => {
+  assert.equal(externalUrl('https://example.org/story?section=news'), 'https://example.org/story?section=news');
+  for (const value of ['javascript:alert(1)', 'data:text/html,unsafe', 'https://reader:secret@example.org/story', '/relative', 'https://www.reddit.com/r/news/comments/abc/title/']) assert.equal(externalUrl(value), undefined);
 });

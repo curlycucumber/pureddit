@@ -53,6 +53,18 @@ To choose your own identifier before generating the project, run `PUREDDIT_BUNDL
 
 Apple signing and testing on an actual iPhone remain necessary. Personal development installation is different from TestFlight/App Store distribution, which normally requires Apple Developer Program membership and App Store Connect setup. No Apple account, certificate, signing profile, or paid store submission was created by this task.
 
+### Missing CoreSimulator or first-launch components
+
+If the converter reports `IDESimulatorFoundation`, `CoreSimulator.framework`, or a required plug-in failing to load, quit Xcode and complete Apple's first-launch setup:
+
+```sh
+sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -runFirstLaunch
+xcrun simctl list devices
+```
+
+After those finish without errors, retry `npm run safari:prepare`. The script checks first-launch status and simulator support before invoking the converter. A missing `build/safari` folder after a converter crash means generation did not finish. If first-launch setup or `simctl` still fails, complete the platform/component setup in Xcode or repair/reinstall Xcode; changing the extension's JavaScript will not repair missing Apple frameworks. Keep any existing generated project and signing changes.
+
 The shared Safari source and converter command are prepared here; this Linux workspace cannot execute Xcode or certify iPhone compatibility. A manually dispatched GitHub workflow can generate a wrapper project on a macOS runner, but device signing/testing still belongs to the owner.
 
 ## User acceptance checks

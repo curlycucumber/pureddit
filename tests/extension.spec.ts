@@ -57,3 +57,27 @@ test('built popup and content harness coordinate enable/disable through simulate
   await expect(popup.getByRole('status')).toContainText('enabled');
   await page.goto('https://www.reddit.com/message/inbox/');await inject(page);await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
 });
+
+test('modern post actions share and copy real links, handle clipboard denial, and open native voting', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text:string)=>{(window as any).copiedPost=text;}}});
+    Object.defineProperty(navigator,'share',{configurable:true,value:async(data:ShareData)=>{(window as any).sharedPost=data;}});
+  });
+  const reader=page.locator('#pureddit-extension-root'), post=reader.getByRole('article').first();
+  const href='https://www.reddit.com/r/news/comments/abc123/discussion/';
+  await post.locator('.post-menu summary').click();await post.getByRole('button',{name:'Copy post link'}).click();
+  await expect(reader.getByRole('status')).toHaveText('Post link copied.');
+  expect(await page.evaluate(()=>(window as any).copiedPost)).toBe(href);
+  await post.getByRole('button',{name:'Share post',exact:true}).click();
+  expect(await page.evaluate(()=>(window as any).sharedPost)).toEqual({title:'A post already loaded on Reddit',url:href});
+  await page.evaluate(()=>{
+    Object.defineProperty(navigator,'share',{configurable:true,value:undefined});
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new DOMException('Permission denied','NotAllowedError');}}});
+  });
+  await post.getByRole('button',{name:'Share post',exact:true}).click();
+  await expect(reader.getByRole('status')).toContainText('Copying is unavailable');
+  await post.getByRole('link',{name:'Vote on Reddit, 42 points'}).click();
+  await expect(page).toHaveURL(href);await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:'Native Reddit control'})).toBeVisible();
+});

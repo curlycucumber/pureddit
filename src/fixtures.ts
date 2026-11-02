@@ -20,6 +20,13 @@ export function createFixture(kind: 'modern' | 'old', feed: string) {
       card.className = 'thing link'; card.setAttribute('data-fullname', `t3_sample${index}`); card.setAttribute('data-subreddit', community); card.setAttribute('data-permalink', permalink);
       for (const [tag, cls, value] of [['a', 'title', title], ['a', 'author', author], ['span', 'score unvoted', score], ['a', 'comments', `${comments} comments`]]) { const node = document.createElement(tag); node.className = cls; node.textContent = value; if (tag === 'a') node.setAttribute('href', permalink); card.append(node); }
     }
+    const timestamp = new Date(Date.now() - (index + 1) * 3 * 60 * 60 * 1000).toISOString();
+    const time = document.createElement('time'); time.dateTime = timestamp; card.append(time);
+    if (image) {
+      const source = `https://example.org/reading/${community.toLowerCase()}/`;
+      if (kind === 'modern') card.setAttribute('content-href', source);
+      else card.querySelector('a.title')!.setAttribute('href', source);
+    }
     if (image) { const link = document.createElement('a'); link.className = 'thumbnail'; const img = document.createElement('img'); img.src = `/images/${image}.webp`; img.setAttribute('slot', 'post-media-preview'); link.append(img); card.append(link); }
     root.append(card);
   });

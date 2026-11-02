@@ -1,8 +1,8 @@
 export type Appearance = 'modern' | 'old';
 export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
-export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; thumbnail?: string; href: string };
-export const VERSION = '0.2.1';
+export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
+export const VERSION = '0.2.2';
 export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', pins: [], recent: [] };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 
@@ -40,5 +40,14 @@ export function postUrl(value: string): string | undefined {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || !['www.reddit.com', 'reddit.com', 'old.reddit.com', 'new.reddit.com'].includes(url.hostname)) return;
     if (!/^\/(?:r\/[A-Za-z0-9_]{2,21}\/)?comments\/[a-z0-9]+(?:\/|$)/i.test(url.pathname)) return;
     return `https://www.reddit.com${url.pathname}`;
+  } catch { return; }
+}
+export function externalUrl(value: string | null | undefined): string | undefined {
+  if (!value) return;
+  try {
+    const url = new URL(value);
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) return;
+    if (['www.reddit.com', 'reddit.com', 'old.reddit.com', 'new.reddit.com'].includes(url.hostname)) return;
+    return url.href;
   } catch { return; }
 }

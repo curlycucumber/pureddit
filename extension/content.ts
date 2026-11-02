@@ -67,7 +67,7 @@ async function start() {
   }
   const schedule = () => { clearTimeout(timer); timer = window.setTimeout(refresh, 120); };
   const observer = new MutationObserver(schedule);
-  observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['post-title', 'permalink', 'content-href', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] });
+  observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   const poll = window.setInterval(() => { if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; schedule(); } }, 750);
   extensionApi()?.storage.onChanged.addListener((changes, area) => {

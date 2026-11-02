@@ -64,6 +64,29 @@ test('old appearance visibly changes density and navigation, persists, and switc
   expect((await firstPost.boundingBox())!.height).toBe(modernPost!.height);
 });
 
+test('modern cards use the reference hierarchy and working menus without simulating account actions', async ({page}) => {
+  await page.goto('/');
+  const reader=page.locator('#reader-host'), post=reader.getByRole('article').first();
+  const meta=await post.locator('.meta').boundingBox(), title=await post.locator('h2').boundingBox();
+  const image=await post.locator('.thumbnail').boundingBox(), footer=await post.locator('.details').boundingBox();
+  expect(meta!.y+meta!.height).toBeLessThan(title!.y);
+  expect(image!.x).toBeGreaterThan(title!.x+title!.width);
+  expect(footer!.y).toBeGreaterThan(image!.y+image!.height);
+  expect(await post.locator('h2').evaluate(node=>parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(20);
+  await expect(post.locator('.post-time')).toContainText('hr. ago');
+  await expect(post.locator('.source-link')).toHaveAttribute('href','https://example.org/reading/design/');
+  await expect(post.getByRole('link',{name:'Join or manage r/Design on Reddit'})).toHaveAttribute('href','https://www.reddit.com/r/Design/');
+  await expect(post.getByRole('link',{name:'Vote on Reddit, 1248 points'})).toHaveAttribute('href',/\/r\/Design\/comments\//);
+  await expect(post.getByRole('link',{name:'86 comments',exact:true})).toHaveAttribute('href',/\/r\/Design\/comments\//);
+  await post.locator('.post-menu summary').click();
+  await expect(post.getByRole('button',{name:'Copy post link'})).toBeVisible();
+  await post.getByRole('button',{name:'Copy post link'}).click();
+  await expect(reader.getByRole('status')).toContainText('real posts');
+  await expect(post.locator('.post-menu')).not.toHaveAttribute('open');
+  await post.getByRole('button',{name:'Share post',exact:true}).click();
+  await expect(reader.getByRole('status')).toContainText('Sharing is available for real posts');
+});
+
 for (const appearance of ['modern','old']) test(`${appearance} mobile community controls and accessibility work without horizontal overflow`, async ({ page }) => {
   await page.setViewportSize({ width:390,height:844 }); await page.goto('/');
   await page.getByLabel('Page layout').selectOption(appearance);
