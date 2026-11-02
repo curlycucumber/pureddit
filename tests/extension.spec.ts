@@ -75,6 +75,11 @@ test('Home selects native Following on the same URL, allows For You, and never s
   await expect(reader.getByText('Paid placement',{exact:true})).toHaveCount(0);
   await expect(page).toHaveURL('https://www.reddit.com/');
   await reader.getByRole('tab',{name:'Following',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
+  await reader.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();
+  await page.locator('[data-native-mode="for-you"]').click();
+  await page.getByRole('button',{name:'pureddit · Reading view'}).click();
+  await expect(reader.getByRole('article')).toHaveCount(1);
+  await expect(page.locator('[data-native-mode="following"]')).toHaveAttribute('aria-selected','true');
 });
 
 test('Home fails closed when native Following is unavailable, instead of relabeling For You', async({context,page})=>{
@@ -98,6 +103,16 @@ test('Home hides the old feed while native selection is pending', async({context
   await expect(reader.locator('.home-feed-status')).toContainText('Switching Reddit');
   await expect(reader.getByRole('article')).toHaveCount(0);
   await expect(reader.getByRole('article')).toHaveCount(1);
+});
+
+test('Following does not cache stale For You cards when the tab changes before the posts arrive', async({context,page})=>{
+  const delayed=homeFixture.replace('()=>render(button.dataset.nativeMode)', `()=>{document.querySelectorAll('[data-native-mode]').forEach(tab=>tab.setAttribute('aria-selected',String(tab===button)));setTimeout(()=>render(button.dataset.nativeMode),900);}`);
+  await harness(context,delayed);await page.goto('https://www.reddit.com/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');
+  await expect(reader.locator('.home-feed-status')).toContainText('Switching Reddit');
+  await expect(reader.getByRole('article')).toHaveCount(0);
+  await expect(reader.getByRole('article')).toHaveCount(1);
+  await expect(reader.getByText('A For You-only community',{exact:true})).toHaveCount(0);
 });
 
 for(const community of ['popular','news']) test(`${community} is a native Reddit feed with cosmetic ad hiding that turns off cleanly`, async({context,page})=>{
@@ -161,6 +176,27 @@ test('open shadow-root posts update, late ad labels evict cached cards, and virt
   await expect(reader.getByText('Shadow feed story',{exact:true})).toHaveCount(0);
   await page.locator('#native shreddit-post:not([promoted])').evaluate(element=>element.remove());
   await expect(reader.getByRole('article')).toHaveCount(1);
+});
+
+test('late-created shadow roots are discovered without a light-DOM mutation', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{const host=document.createElement('section');host.id='late-root';document.body.append(host);});
+  await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  // Let initial extension mutations settle before native hydration attaches a root.
+  await page.waitForTimeout(250);
+  await page.locator('#late-root').evaluate(element=>{element.attachShadow({mode:'open'}).innerHTML='<shreddit-post post-title="Late hydrated story" subreddit-name="news" permalink="/r/news/comments/late1/title/"></shreddit-post>';});
+  await expect(reader.getByText('Late hydrated story',{exact:true})).toBeVisible();
+});
+
+test('native shadow rerenders cannot permanently remove ad filtering', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{
+    const host=document.createElement('section');host.id='rerender-root';host.attachShadow({mode:'open'}).innerHTML='<shreddit-ad-post>Native advertisement</shreddit-ad-post>';document.body.append(host);
+  });
+  await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await reader.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();
+  await page.locator('#rerender-root').evaluate(element=>{element.shadowRoot!.replaceChildren(Object.assign(document.createElement('shreddit-ad-post'),{textContent:'Rerendered advertisement'}));});
+  await expect.poll(()=>page.locator('#rerender-root').evaluate(element=>getComputedStyle(element.shadowRoot!.querySelector('shreddit-ad-post')!).display)).toBe('none');
 });
 
 test('the bundled script does not activate on unrelated sites or Reddit account pages', async({context,page})=>{

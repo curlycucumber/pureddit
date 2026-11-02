@@ -28,8 +28,10 @@ async function start() {
   function adFiltering(enabled: boolean, roots: Array<Document | ShadowRoot> = []) {
     if (enabled) {
       if (!adStyle.isConnected) document.documentElement.append(adStyle); document.documentElement.setAttribute('data-pureddit-feed', '');
-      for (const root of roots) if (root instanceof ShadowRoot && !nativeStyles.has(root)) {
-        const style = document.createElement('style'); style.textContent = AD_SELECTOR + '{display:none!important}'; root.append(style); nativeStyles.set(root, style);
+      for (const root of roots) if (root instanceof ShadowRoot) {
+        let style = nativeStyles.get(root);
+        if (!style) { style = document.createElement('style'); style.textContent = AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
+        if (style.parentNode !== root) root.append(style);
       }
       for (const [root, style] of nativeStyles) if (!root.host.isConnected) { style.remove(); nativeStyles.delete(root); }
     } else { document.documentElement.removeAttribute('data-pureddit-feed'); adStyle.remove(); nativeStyles.forEach(style => style.remove()); nativeStyles.clear(); }
@@ -96,6 +98,7 @@ async function start() {
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? nativeRoots() : [];
+    for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page), roots);
     if (!preferences.enabled || !page) {
       restore(); host?.remove(); toggle?.remove(); host = undefined; toggle = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); return;
@@ -117,7 +120,6 @@ async function start() {
     const options = { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
     for (const root of roots) if (root instanceof ShadowRoot) {
-      if (!observed.has(root)) { observer.observe(root, observation); observed.add(root); }
       const extra = extractPosts(root, location.href, options); extracted.posts.push(...extra.posts); extracted.filtered += extra.filtered; extracted.excluded.push(...extra.excluded);
       if (extracted.layout === 'unsupported' && extra.layout !== 'unsupported') extracted.layout = extra.layout;
     }
@@ -137,7 +139,16 @@ async function start() {
   const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.body, observation);
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
-  const poll = window.setInterval(() => { if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; homeController.reset(); schedule(); } else if (!suppressed && homeFeed?.status === 'switching') schedule(); }, 750);
+  let lastRootScan = 0;
+  const poll = window.setInterval(() => {
+    if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; homeController.reset(); schedule(); }
+    else if (!suppressed && homeFeed?.status === 'switching') schedule();
+    else if (preferences.enabled && pageFromUrl(location.href) && Date.now() - lastRootScan >= 1500) {
+      lastRootScan = Date.now();
+      // Attaching a shadow root does not generate a light-DOM mutation.
+      if (nativeRoots().some(root => root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) schedule();
+    }
+  }, 750);
   extensionApi()?.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[KEY]) {
       const next = normalizePreferences(changes[KEY].newValue);

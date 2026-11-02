@@ -16,6 +16,10 @@ This is a development build. Automated fixture/harness checks cannot certify liv
 | Missing Xcode first-launch components caused converter crashes | The Mac helper checks first-launch status, iOS SDK, and CoreSimulator and reports recovery steps before conversion. |
 | Appearance controls were easy to mistake for preview-only features | Modern/Old and Light/Dark controls are shared in a bar beneath the installed reader's header, with persisted preferences and four layout/theme combinations. |
 | Vercel favicon used the retired logo | The preview now serves the exact orange/white p PNG used by the extension. |
+| Home tabs could select before their new posts arrived | A requested native feed transition now waits for changed card content/identity as well as selected tab state, preventing stale For You cards from entering the Following cache. |
+| Returning from native feed controls could leave Home empty | If a previously confirmed native tab was changed in Show Reddit, returning retries the selected Pureddit mode with bounded pending/failure behavior. |
+| Late shadow-root hydration could be missed | A feed-only periodic check discovers newly attached public roots that produce no light-DOM mutation. |
+| Native shadow rerenders could discard injected ad styles | Missing styles are reattached, and roots remain observed while Show Reddit is active. |
 
 ## Still requires live validation
 

@@ -1,4 +1,5 @@
 import type { HomeFeed, HomeMode, NativeAction } from '../shared/model';
+import { isAdvertisement } from '../shared/feed';
 
 // Read only public, open DOM/shadow roots. Never inspect page globals or sessions.
 export function nativeRoots(root: Document | ShadowRoot = document): Array<Document | ShadowRoot> {
@@ -44,19 +45,41 @@ function feedControl(mode: HomeMode, roots: Array<Document | ShadowRoot>) {
 export class HomeFeedController {
   private attempted = '';
   private started = 0;
+  private pendingKey = '';
+  private previousCards: Map<Element, string> | undefined;
   reset() { this.attempted = ''; }
+  private cards(roots: Array<Document | ShadowRoot>) {
+    const cards = new Map<Element, string>();
+    for (const root of roots) for (const post of root.querySelectorAll('shreddit-post, .thing.link')) {
+      if (isAdvertisement(post)) continue;
+      cards.set(post, [post.getAttribute('permalink'), post.getAttribute('data-permalink'), post.getAttribute('post-title'), post.querySelector('a.title, [slot="title"]')?.textContent].join('\n'));
+    }
+    return cards;
+  }
+  private contentChanged(roots: Array<Document | ShadowRoot>) {
+    if (!this.previousCards) return true;
+    const current = this.cards(roots);
+    return current.size !== this.previousCards.size || [...current].some(([node, value]) => this.previousCards!.get(node) !== value);
+  }
   select(mode: HomeMode, beforeClick: () => void, roots = nativeRoots()): HomeFeed {
-    const control = feedControl(mode, roots);
-    if (control && selected(control)) return { mode, status: 'ready' };
-    if (!control) return { mode, status: 'unavailable', message: `Reddit's ${mode === 'following' ? 'Following' : 'For You'} tab is not available on this page yet. Open Reddit's feed controls and sign in if needed.` };
     const key = `${location.href}:${mode}`;
+    if (this.pendingKey !== key) { this.previousCards = undefined; this.pendingKey = key; }
+    const control = feedControl(mode, roots);
+    if (control && selected(control) && this.contentChanged(roots)) { this.previousCards = undefined; return { mode, status: 'ready' }; }
+    if (!control) return { mode, status: 'unavailable', message: `Reddit's ${mode === 'following' ? 'Following' : 'For You'} tab is not available on this page yet. Open Reddit's feed controls and sign in if needed.` };
+    // The user may have changed tabs in Show Reddit after a successful selection.
+    // Retry that new transition, while keeping failed/pending attempts bounded.
+    if (!selected(control) && !this.previousCards && this.attempted === key) this.attempted = '';
     if (this.attempted !== key) {
       this.attempted = key; this.started = Date.now();
+      // Native tabs can change selection before fetching/replacing their posts.
+      // Keep the prior feed out of the reader/cache until its cards change too.
+      this.previousCards ??= this.cards(roots);
       beforeClick(); control.click();
-      if (selected(control)) return { mode, status: 'ready' };
+      if (selected(control) && (this.previousCards.size === 0 || this.contentChanged(roots))) { this.previousCards = undefined; return { mode, status: 'ready' }; }
     }
     if (Date.now() - this.started < 3000) return { mode, status: 'switching', message: `Switching Reddit to ${mode === 'following' ? 'Following' : 'For You'}…` };
-    return { mode, status: 'unavailable', message: 'Reddit did not confirm the requested feed. No Home posts are shown until the native tab is selected. Use Reddit’s feed controls, then return to Pureddit.' };
+    return { mode, status: 'unavailable', message: 'Reddit has not confirmed an updated feed. No Home posts are shown until its tab and content are ready. Use Reddit’s feed controls, then return to Pureddit.' };
   }
 }
 
