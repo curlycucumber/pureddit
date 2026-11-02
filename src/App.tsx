@@ -357,6 +357,7 @@ export default function App() {
         <a className={section === 'home' ? 'active' : ''} href="#/home"><Home size={19} /><span>Home</span>{section === 'home' && <span className="active-dot" />}</a>
         <a className={section === 'popular' ? 'active' : ''} href="#/popular"><Flame size={19} /><span>Popular</span></a>
         <a className={section === 'news' ? 'active' : ''} href="#/news"><Newspaper size={19} /><span>News</span></a>
+        <a href="#/read-only"><List size={19} /><span>Read Only</span></a>
       </nav>
       <div className="sidebar-rule" />
       {store.recent.length > 0 && <section className="sidebar-section recent-section"><h2>Recently visited <span>{store.recent.length}/5</span></h2>{store.recent.map(name => communityLink(name, true))}</section>}

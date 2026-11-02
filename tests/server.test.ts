@@ -4,6 +4,7 @@ import { createServer, type Server } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import auth from '../api/auth/[action].ts';
 import reddit from '../api/reddit.ts';
+import readOnly from '../api/read-only.ts';
 import { configuration, seal, unseal, type Session } from '../server/session.ts';
 import { comments, listing, post } from '../server/normalize.ts';
 
@@ -20,7 +21,7 @@ const mutate = (data: unknown, cookie = sessionCookie(), source = origin) => ({ 
 const thing = (id: string, community = 'books', extra = {}) => ({ kind: 't3', data: { id, name: `t3_${id}`, subreddit: community, title: `Post ${id}`, author: 'reader', score: 10, created_utc: 1700000000, num_comments: 3, is_self: true, permalink: `/r/${community}/comments/${id}/post`, ...extra } });
 
 before(async () => {
-  server = createServer((req, res) => { void (req.url?.startsWith('/api/auth/') ? auth(req, res) : reddit(req, res)); });
+  server = createServer((req, res) => { void (req.url?.startsWith('/api/auth/') ? auth(req, res) : req.url?.split('?')[0] === '/api/read-only' ? readOnly(req, res) : reddit(req, res)); });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   globalThis.fetch = (async (input: string | URL | Request, options?: RequestInit) => {
@@ -191,4 +192,28 @@ test('blocked public access returns the upstream failure without sample data', a
   const response = await fetch(`${base}/api/reddit?resource=popular`);
   assert.equal(response.status, 403); const data = await response.json();
   assert.match(data.error, /blocked public access/); assert.equal(data.posts, undefined);
+});
+
+test('Read Only ignores account cookies and fetches only the two public feed sources without credentials', async () => {
+  const cookie = sessionCookie();
+  delete process.env.REDDIT_CLIENT_SECRET; delete process.env.SESSION_SECRET;
+  respond = () => Response.json({ data: { children: [thing('a'), thing('ad', 'news', { promoted: true })], after: 't3_next' } });
+  for (const feed of ['popular', 'news']) {
+    const response = await fetch(`${base}/api/read-only?feed=${feed}&sort=top&after=t3_next`, { headers: { Cookie: cookie } });
+    assert.equal(response.status, 200); const data = await response.json(); assert.equal(data.posts.length, 1); assert.equal(data.after, 't3_next');
+    const call = calls.at(-1)!; const url = new URL(call.url);
+    assert.equal(url.origin, 'https://www.reddit.com'); assert.equal(url.pathname, `/r/${feed}/top.json`);
+    assert.equal(url.searchParams.get('t'), 'week'); assert.equal(url.searchParams.get('after'), 't3_next');
+    assert.equal((call.options!.headers as Record<string, string>).Authorization, undefined);
+    assert.equal((call.options!.headers as Record<string, string>).Cookie, undefined);
+  }
+});
+
+test('Read Only rejects writes and arbitrary feeds and reports public access blocks', async () => {
+  assert.equal((await fetch(`${base}/api/read-only`, { method: 'POST', body: '{}' })).status, 405);
+  for (const query of ['feed=worldnews', 'feed=https://evil.invalid', 'sort=invalid', 'after=invalid']) assert.equal((await fetch(`${base}/api/read-only?${query}`)).status, 400);
+  assert.equal(calls.length, 0);
+  respond = () => Response.json({}, { status: 403 });
+  const response = await fetch(`${base}/api/read-only?feed=news`);
+  assert.equal(response.status, 403); const data = await response.json(); assert.match(data.error, /blocked this public feed/); assert.equal(data.posts, undefined);
 });

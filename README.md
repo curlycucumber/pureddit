@@ -48,6 +48,10 @@ For a custom domain, update both the registered Reddit redirect and `REDDIT_REDI
 
 ## Connected account behavior
 
+### Read Only test page
+
+Open `https://pureddit.vercel.app/#/read-only` or choose **Read Only** in the sidebar. This separate page fetches only `r/popular` and `r/news`, with Hot/New/Top sorting and cursor pagination. Titles open the original discussion on Reddit. It makes no session request, sends no account cookies, and has no sign-in, voting, commenting, saving, or submission controls. The dedicated `/api/read-only` endpoint accepts GET only and always uses public JSON listings, even if the visitor is signed into the main app. Reddit can still block or rate-limit these reads; an error and external Reddit link are shown instead of sample posts. The page does not bypass API access requirements. Subreddit following is not part of this initial two-feed experiment.
+
 - **Account:** Reddit OAuth authorization-code flow, profile username/karma/account age, automatic access-token refresh, and sign-out with token revocation. Pureddit never collects your Reddit password.
 - **Home:** newest posts by default, filtered on the server against the complete returned subscription list. Empty subscriptions do not fall back to default or recommended communities. Promoted posts are removed.
 - **Popular:** Reddit's popular listing. **News:** `r/news`, not Reddit's proprietary News tab. Both pages fetch live listings while signed out through Reddit's public JSON endpoints, and use OAuth when signed in. Public access can be blocked or rate-limited by Reddit; errors are shown without substituting demo posts. Reading public post discussions works without sign-in; account actions still require authorization.

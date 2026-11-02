@@ -2,9 +2,11 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import auth from './api/auth/[action].ts';
 import reddit from './api/reddit.ts';
+import readOnly from './api/read-only.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 function apiMiddleware(req: IncomingMessage, res: ServerResponse, next: () => void) {
+  if (req.url?.split('?')[0] === '/api/read-only') { void readOnly(req, res); return; }
   if (req.url?.startsWith('/api/auth/')) { void auth(req, res); return; }
   if (req.url?.split('?')[0] === '/api/reddit') { void reddit(req, res); return; }
   next();
