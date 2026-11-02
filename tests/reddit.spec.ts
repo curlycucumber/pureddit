@@ -66,7 +66,7 @@ test('connected account replaces demo content, shows all communities, and pages 
   await expect(page.getByRole('dialog')).toContainText('1.3k');
   await expect(page.getByRole('dialog')).toContainText('2014');
   await page.getByRole('dialog').getByRole('link', { name: 'Your posts' }).click();
-  await expect(page.getByRole('heading', { name: 'Posts by u/real_reader.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Posts by u/real_reader' })).toBeVisible();
   const storage = await page.evaluate(() => JSON.stringify(localStorage));
   expect(storage).not.toContain('redditName'); expect(storage).not.toContain('access_token'); expect(storage).not.toContain('A real account post');
 });

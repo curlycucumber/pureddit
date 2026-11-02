@@ -86,7 +86,7 @@ test('recent communities are unique, newest first, capped at five, and persist',
 });
 
 test('search, compact view, community filter, and direct post links work', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Your corner of Reddit.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
   await page.keyboard.press('/');
   await expect(page.getByLabel('Search posts and communities')).toBeFocused();
   await page.getByLabel('Search posts and communities').fill('software');
@@ -121,10 +121,10 @@ test('link posts validate protocols and render a safe outbound link', async ({ p
 
 test('mobile navigation and composing work without horizontal overflow', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('heading', { name: 'Your corner of Reddit.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible();
   await page.getByRole('button', { name: 'Open navigation' }).click();
   await page.getByRole('link', { name: 'Popular', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'The bigger picture.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Popular' })).toBeVisible();
   await expect(page.locator('.sidebar')).not.toHaveClass(/open/);
   await page.locator('.header-actions').getByRole('button', { name: 'Create post', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();

@@ -11,18 +11,18 @@ export type Post = {
 };
 
 export const communities: Community[] = [
-  { name: 'Design', label: 'd', color: '#7d5894', background: '#eee7f5', description: 'Good design is a conversation. A place for thoughtful objects, interesting ideas, and the people who make them.', members: '4.2m', category: 'Art & design' },
-  { name: 'technology', label: 't', color: '#3b6c88', background: '#e5eff5', description: 'The innovations, ideas, and people shaping the world around us.', members: '18.1m', category: 'Technology' },
-  { name: 'programming', label: '</>', color: '#516a5e', background: '#e6eee7', description: 'Computer programming, useful projects, and the joy of figuring things out.', members: '6.7m', category: 'Technology' },
-  { name: 'photography', label: 'ph', color: '#7e603f', background: '#f1eadd', description: 'A place to share the way you see the world. All cameras and experience levels welcome.', members: '5.4m', category: 'Art & design' },
-  { name: 'books', label: 'b', color: '#875653', background: '#f3e5e2', description: 'For the love of reading. Talk about the books that stay with you.', members: '26.3m', category: 'Culture' },
-  { name: 'science', label: 's', color: '#446e67', background: '#e3efeb', description: 'New research, big questions, and evidence-based conversations about our universe.', members: '33.2m', category: 'Science' },
-  { name: 'space', label: '✳', color: '#5d638e', background: '#e9eaf5', description: 'Looking up. Exploration, astronomy, and our place in the cosmos.', members: '27.8m', category: 'Science' },
-  { name: 'architecture', label: 'a', color: '#6f6352', background: '#eeeae0', description: 'Spaces worth thinking about. Architecture, buildings, and the life between them.', members: '2.1m', category: 'Art & design' },
-  { name: 'movies', label: 'm', color: '#7e5b78', background: '#f0e6ef', description: 'A place to discuss films, discover something new, and stay for the credits.', members: '34.5m', category: 'Culture' },
-  { name: 'worldnews', label: 'w', color: '#436e81', background: '#e5eef3', description: 'News and perspectives from around the world. Read widely. Discuss thoughtfully.', members: '42.1m', category: 'News' },
-  { name: 'news', label: 'n', color: '#8a5b4d', background: '#f3e8e1', description: 'Today’s headlines, with room for a conversation.', members: '29.4m', category: 'News' },
-  { name: 'Outdoors', label: 'o', color: '#516e49', background: '#e8efe1', description: 'Fresh air, small adventures, and the great outside.', members: '4.8m', category: 'Lifestyle' },
+  { name: 'Design', label: 'd', color: '#31597c', background: '#e9f1f8', description: 'Good design is a conversation. A place for thoughtful objects, interesting ideas, and the people who make them.', members: '4.2m', category: 'Art & design' },
+  { name: 'technology', label: 't', color: '#31597c', background: '#e9f1f8', description: 'The innovations, ideas, and people shaping the world around us.', members: '18.1m', category: 'Technology' },
+  { name: 'programming', label: '</>', color: '#31597c', background: '#e9f1f8', description: 'Computer programming, useful projects, and the joy of figuring things out.', members: '6.7m', category: 'Technology' },
+  { name: 'photography', label: 'ph', color: '#31597c', background: '#e9f1f8', description: 'A place to share the way you see the world. All cameras and experience levels welcome.', members: '5.4m', category: 'Art & design' },
+  { name: 'books', label: 'b', color: '#31597c', background: '#e9f1f8', description: 'For the love of reading. Talk about the books that stay with you.', members: '26.3m', category: 'Culture' },
+  { name: 'science', label: 's', color: '#31597c', background: '#e9f1f8', description: 'New research, big questions, and evidence-based conversations about our universe.', members: '33.2m', category: 'Science' },
+  { name: 'space', label: '*', color: '#31597c', background: '#e9f1f8', description: 'Looking up. Exploration, astronomy, and our place in the cosmos.', members: '27.8m', category: 'Science' },
+  { name: 'architecture', label: 'a', color: '#31597c', background: '#e9f1f8', description: 'Spaces worth thinking about. Architecture, buildings, and the life between them.', members: '2.1m', category: 'Art & design' },
+  { name: 'movies', label: 'm', color: '#31597c', background: '#e9f1f8', description: 'A place to discuss films, discover something new, and stay for the credits.', members: '34.5m', category: 'Culture' },
+  { name: 'worldnews', label: 'w', color: '#31597c', background: '#e9f1f8', description: 'News and perspectives from around the world. Read widely. Discuss thoughtfully.', members: '42.1m', category: 'News' },
+  { name: 'news', label: 'n', color: '#31597c', background: '#e9f1f8', description: 'Today’s headlines, with room for a conversation.', members: '29.4m', category: 'News' },
+  { name: 'Outdoors', label: 'o', color: '#31597c', background: '#e9f1f8', description: 'Fresh air, small adventures, and the great outside.', members: '4.8m', category: 'Lifestyle' },
 ];
 
 export const initialSubscriptions = communities.slice(0, 9).map(c => c.name);
@@ -51,7 +51,7 @@ export const initialPosts: Post[] = [
   { id: 'news-library', community: 'news', title: 'Local libraries find new ways to bring communities together.', author: 'public_interest', score: 1126, created: hoursAgo(2), commentCount: 106, flair: 'Community', news: true, body: 'Sample news discussion: libraries are becoming places for much more than borrowing books, with workshops, shared tools, and space to connect.\n\nThis is demonstration content, not a live news report.', comments: comments('news') },
 ];
 
-export const getCommunity = (name: string): Community => communities.find(c => c.name === name) || { name, label: name.slice(0, 2).toLowerCase(), color: '#637254', background: '#e8eee0', description: '', members: '—', category: 'Reddit community' };
+export const getCommunity = (name: string): Community => communities.find(c => c.name === name) || { name, label: name.slice(0, 2).toLowerCase(), color: '#31597c', background: '#e9f1f8', description: '', members: '—', category: 'Reddit community' };
 export function formatCount(n: number) { return n >= 1000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k` : String(n); }
 export function timeAgo(timestamp: number) {
   const minutes = Math.max(1, Math.floor((Date.now() - timestamp) / 60000));

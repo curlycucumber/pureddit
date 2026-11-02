@@ -3,7 +3,7 @@ import type { Community, Comment, Post } from '../src/data.ts';
 // Only explicitly selected fields are returned to the browser. Never forward tokens or raw HTML.
 type Thing = { kind: string; data: Record<string, any> };
 export function community(data: Record<string, any>): Community {
-  return { name: data.display_name, label: data.display_name?.slice(0, 2).toLowerCase() || 'r', color: '#637254', background: '#e8eee0', description: data.public_description || '', members: Number(data.subscribers || 0).toLocaleString(), category: 'Reddit community', redditName: data.name };
+  return { name: data.display_name, label: data.display_name?.slice(0, 2).toLowerCase() || 'r', color: '#31597c', background: '#e9f1f8', description: data.public_description || '', members: Number(data.subscribers || 0).toLocaleString(), category: 'Reddit community', redditName: data.name };
 }
 const vote = (likes: unknown): -1 | 0 | 1 => likes === true ? 1 : likes === false ? -1 : 0;
 function safeImage(value: unknown) {
