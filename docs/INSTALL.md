@@ -25,21 +25,29 @@ Temporary add-ons are removed when Firefox closes. Permanent standard-Firefox di
 
 The Safari ZIP contains WebExtension resources. **An iPhone cannot install that ZIP directly**, and the Vercel iPhone preview is not an installed Safari extension.
 
-On a Mac with full Xcode installed and selected:
+On a Mac with full Xcode installed and selected, install Node.js 24 if `node -v` is missing or shows a different major version. The [official Node.js download](https://nodejs.org/en/download) provides macOS installers. Xcode needs a local build checkout; GitHub remains the source of truth.
+
+For a new checkout, run:
 
 ```sh
 git clone https://github.com/curlycucumber/pureddit.git
 cd pureddit
 npm ci
-npm run build
-bash scripts/convert-safari.sh
+npm run safari:prepare
+open build/safari
 ```
 
-The script runs Apple's `safari-web-extension-converter` to generate a Swift wrapper project under `build/safari`. It does not overwrite an existing generated project. Run with another destination argument for another build. Full Xcode is required; Command Line Tools alone may not supply the converter/iOS SDK.
+If the repository is already on your Mac, use that checkout and update it with `git pull --ff-only` before running the npm commands. Preserve any local changes; do not clone over an existing directory.
 
-1. Open the generated Xcode project.
-2. Select the iOS app/extension targets. Set a unique bundle identifier and your Apple signing team for both. The repository's example identifier is `com.curlycucumber.pureddit`; use an identifier your Apple account can register.
-3. Build/run the iOS containing app on your paired iPhone. Follow Xcode's developer-mode/trust instructions for your device. Use Safari/iOS 16.4 or later.
+`safari:prepare` builds the extension, checks that full Xcode and the iOS SDK are available, and runs Apple's `safari-web-extension-converter` to generate a Swift wrapper project under `build/safari`. Finder opens the generated folder with the final command; open the `.xcodeproj` inside it. Full Xcode is required; Command Line Tools alone do not supply the required tools.
+
+The converter refuses to overwrite an existing generated project, preserving any signing/native changes. To generate a separate wrapper after rebuilding, run `bash scripts/convert-safari.sh build/safari-another`. Its copied extension resources reflect the build at conversion time; a subsequent web-source build does not update the existing Xcode project's copied resources automatically. Re-copy the built extension resources into the corresponding extension Resources folder, or generate a separate wrapper.
+
+To choose your own identifier before generating the project, run `PUREDDIT_BUNDLE_ID=com.yourname.pureddit npm run safari:prepare`, replacing `yourname` with your own identifier component.
+
+1. Open the generated Xcode project. Choose the **iOS app scheme**, not the macOS scheme, from the toolbar.
+2. Add your Apple account in **Xcode → Settings → Accounts**. Under **Signing & Capabilities** select your team and enable automatic signing for **both the iOS app and Safari extension targets**. Set unique bundle identifiers your team can register; the extension identifier must start with the containing app's identifier (for example, `com.yourname.pureddit` and `com.yourname.pureddit.extension`). The repository's default is an example, not a registered identifier for your account.
+3. Connect and trust your iPhone, then select it as the run destination and choose **Product → Run**. Follow Xcode's developer-mode/trust instructions for your device; on supported iOS versions Developer Mode is under **Settings → Privacy & Security**. Use Safari/iOS 16.4 or later. If a device's newer iOS is unsupported by Xcode, update Xcode before trying again. A simulator run can help check the wrapper but does not establish device signing or live Reddit compatibility.
 4. Enable Pureddit in Safari's extension settings (typically Settings → Apps → Safari → Extensions on current iOS). Grant access to Reddit, not all websites.
 5. Open a Reddit feed in Safari. Verify the reader, Communities button, Show Reddit, popup toggle, and native discussion navigation.
 

@@ -47,6 +47,8 @@ dist/downloads/pureddit-safari.zip
 
 [Installation and Safari packaging](docs/INSTALL.md) · [Architecture and limitations](docs/ARCHITECTURE.md)
 
+On a Mac with full Xcode/iOS SDK and Node.js 24, run `npm ci` then `npm run safari:prepare` to generate the Safari wrapper. Open the `.xcodeproj` under `build/safari`, select the iOS scheme, and configure your signing team for the containing app and extension before running on your iPhone. Generated native projects and signing settings stay out of Git; the extension source and packaging instructions remain in GitHub.
+
 ## Reading behavior
 
 - Supports modern `shreddit-post` cards and old Reddit `.thing.link` cards, using only content already present on the opened page.
