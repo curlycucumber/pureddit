@@ -14,7 +14,7 @@ test('Read Only switches public feeds, sorts, paginates, and has no account acti
     const id = url.searchParams.has('after') ? 'second' : 'first';
     await route.fulfill({ json: { posts: [sample(id, url.searchParams.get('feed') === 'news' ? 'news' : 'books')], after: id === 'first' ? 't3_next' : null } });
   });
-  await page.goto('/#/read-only');
+  await page.goto('/#/read-only?mode=live');
   await expect(page.getByRole('heading', { name: 'Read Only', exact: true })).toBeVisible();
   await expect(page.getByRole('article')).toHaveCount(1);
   expect(requests.some(query => query.includes('feed=popular') && query.includes('sort=hot'))).toBe(true);
@@ -30,7 +30,7 @@ test('Read Only switches public feeds, sorts, paginates, and has no account acti
   await page.getByRole('button', { name: 'Top', exact: true }).click();
   await expect.poll(() => requests.some(query => query.includes('feed=news') && query.includes('sort=top'))).toBe(true);
   for (const name of ['Upvote', 'Downvote', 'Comment', 'Create post', 'Save post', 'Sign in with Reddit']) await expect(page.getByRole('button', { name, exact: true })).toHaveCount(0);
-  await expect(page.locator('textarea,input')).toHaveCount(0);
+  await expect(page.locator('textarea:visible,input:visible')).toHaveCount(0);
   expect(otherApis).toEqual([]); expect(await page.evaluate(() => localStorage.length)).toBe(0);
   expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze()).violations).toEqual([]);
 });
@@ -38,7 +38,7 @@ test('Read Only switches public feeds, sorts, paginates, and has no account acti
 test('blocked public requests show an error and retry without sample posts', async ({ page }) => {
   let blocked = true;
   await page.route('**/api/read-only?**', route => route.fulfill(blocked ? { status: 403, json: { error: 'Reddit blocked this public feed request.' } } : { json: { posts: [sample('retry')], after: null } }));
-  await page.goto('/#/read-only');
+  await page.goto('/#/read-only?mode=live');
   await expect(page.getByRole('alert')).toContainText('Reddit blocked');
   await expect(page.getByRole('article')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Browse on Reddit' })).toHaveAttribute('href', 'https://www.reddit.com/r/popular/');
@@ -50,7 +50,7 @@ test('blocked public requests show an error and retry without sample posts', asy
 test('Read Only handles empty feeds and mobile layout', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/read-only?**', route => route.fulfill({ json: { posts: [], after: null } }));
-  await page.goto('/#/read-only');
+  await page.goto('/#/read-only?mode=live');
   await expect(page.getByRole('heading', { name: 'No posts returned' })).toBeVisible();
   await page.getByRole('button', { name: 'r/news', exact: true }).click();
   await expect(page).toHaveTitle('Read Only · r/news · Pureddit');
@@ -75,7 +75,7 @@ test('HTML platform failures identify the feed endpoint and HTTP status without 
     status: 500, contentType: 'text/html', headers: { 'x-vercel-error': 'FUNCTION_INVOCATION_FAILED' },
     body: '<html><body>Internal platform error. Private diagnostic text.</body></html>',
   }));
-  await page.goto('/#/read-only');
+  await page.goto('/#/read-only?mode=live');
   await expect(page.getByRole('alert')).toContainText('feed endpoint');
   await expect(page.getByRole('alert')).toContainText('HTTP 500');
   await expect(page.getByRole('alert')).toContainText('FUNCTION_INVOCATION_FAILED');
@@ -87,8 +87,8 @@ test('HTML platform failures identify the feed endpoint and HTTP status without 
 
 test('Read Only labels app-authorized results without sign-in controls', async ({ page }) => {
   await page.route('**/api/read-only?**', route => route.fulfill({ json: { posts: [sample('app')], after: null, access: 'app-oauth' } }));
-  await page.goto('/#/read-only');
+  await page.goto('/#/read-only?mode=live');
   await expect(page.getByRole('article')).toHaveCount(1);
-  await expect(page.locator('.reader-shell footer')).toContainText('App-authorized');
+  await expect(page.locator('.reader-shell footer:visible')).toContainText('App-authorized');
   await expect(page.getByRole('button', { name: /Sign in/ })).toHaveCount(0);
 });

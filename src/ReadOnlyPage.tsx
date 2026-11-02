@@ -4,6 +4,7 @@ import type { Post } from './data';
 import { timeAgo } from './data';
 import { request } from './reddit';
 import './read-only.css';
+import PasteHeadlines from './PasteHeadlines';
 
 type Feed = 'popular' | 'news';
 type Sort = 'hot' | 'new' | 'top';
@@ -16,6 +17,7 @@ function redditLink(post: Post) {
 
 export default function ReadOnlyPage() {
   const [feed, setFeed] = useState<Feed>('popular');
+  const [mode, setMode] = useState<'paste' | 'live'>(() => new URLSearchParams(location.hash.split('?')[1] || '').get('mode') === 'live' ? 'live' : 'paste');
   const [sort, setSort] = useState<Sort>('hot');
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<Listing>({ posts: [], after: null });
@@ -28,6 +30,7 @@ export default function ReadOnlyPage() {
 
   useEffect(() => {
     document.title = `Read Only · r/${feed} · Pureddit`;
+    if (mode === 'paste') return;
     const controller = new AbortController();
     moreRequest.current?.abort(); morePending.current = false;
     setLoading(true); setMoreLoading(false); setError(''); setMoreError(''); setData({ posts: [], after: null });
@@ -36,10 +39,10 @@ export default function ReadOnlyPage() {
       .catch(error => { if (!controller.signal.aborted) setError(error.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); moreRequest.current?.abort(); };
-  }, [feed, sort, reload]);
+  }, [feed, sort, reload, mode]);
 
   async function loadMore() {
-    if (!data.after || morePending.current) return;
+    if (mode !== 'live' || !data.after || morePending.current) return;
     const controller = new AbortController(); moreRequest.current = controller;
     morePending.current = true; setMoreLoading(true); setMoreError('');
     try {
@@ -56,9 +59,12 @@ export default function ReadOnlyPage() {
       <a href="#/home" className="reader-back"><ArrowLeft size={15} />Back to Pureddit</a>
     </header>
     <main className="reader-shell" id="reader-main" tabIndex={-1}>
-      <div className="reader-heading"><div><span className="reader-test-label">Test page</span><h1>Read Only</h1><p>Browse r/popular and r/news. Posts open on Reddit.</p></div><Newspaper size={27} aria-hidden="true" /></div>
-      <p className="reader-notice">No Reddit account connection, voting, commenting, or posting. This reader uses app-authorized access when configured, or tests public feeds otherwise. Reddit API approval is still required for app access.</p>
+      <div className="reader-heading"><div><span className="reader-test-label">Test page</span><h1>Read Only</h1><p>Import headlines from r/popular or r/news. Posts open on Reddit.</p></div><Newspaper size={27} aria-hidden="true" /></div>
+      <nav className="reader-modes" aria-label="Reader mode">{(['paste', 'live'] as const).map(value => <button key={value} aria-pressed={mode === value} onClick={() => { setMode(value); history.replaceState(null, '', `${location.pathname}${location.search}#/read-only${value === 'live' ? '?mode=live' : ''}`); }}>{value === 'paste' ? 'Paste headlines' : 'Live feeds'}</button>)}</nav>
+      <p className="reader-notice">{mode === 'paste' ? 'Manual import · Paste content you copied in your browser. No Reddit requests, account connection, or uploads.' : 'Live feeds · Uses app-authorized access when configured, or tests public feeds otherwise. Reddit may block requests; approved API access is required for app authorization.'}</p>
       <nav className="reader-feed-tabs" aria-label="Choose feed">{(['popular', 'news'] as Feed[]).map(value => <button key={value} aria-pressed={feed === value} onClick={() => setFeed(value)}>r/{value}</button>)}</nav>
+      <div hidden={mode !== 'paste'}><PasteHeadlines feed={feed} /></div>
+      {mode === 'live' && <>
       <div className="reader-toolbar"><div className="sort-tabs" aria-label="Sort posts">{(['hot', 'new', 'top'] as Sort[]).map(value => <button key={value} aria-pressed={sort === value} className={sort === value ? 'active' : ''} onClick={() => setSort(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</div><div className="reader-tools"><span>{sort === 'top' ? 'Top this week' : `r/${feed}`}</span><button className="icon-button" aria-label="Refresh feed" disabled={loading} onClick={() => setReload(value => value + 1)}><RefreshCw size={16} /></button></div></div>
       {loading ? <div className="empty-state" role="status"><h2>Loading r/{feed}…</h2><p>Requesting posts from Reddit.</p></div> : error ? <div className="reader-error" role="alert"><h2>Couldn’t load r/{feed}</h2><p>{error}</p><div><button className="button" onClick={() => setReload(value => value + 1)}>Try again</button><a className="button" href={`https://www.reddit.com/r/${feed}/`} target="_blank" rel="noopener noreferrer">Browse on Reddit<ExternalLink size={14} /></a></div></div> : <>
         <section className="feed reader-feed" aria-label={`r/${feed} posts`}>
@@ -73,6 +79,7 @@ export default function ReadOnlyPage() {
         {data.after ? <div className="load-more"><button className="button" onClick={loadMore} disabled={moreLoading}>{moreLoading ? 'Loading…' : 'Load more posts'}<ArrowDown size={15} /></button></div> : data.posts.length > 0 && <p className="feed-end-label">End of feed</p>}
       </>}
       <footer className="content-footer"><span>Pureddit · Read Only test{data.access && ` · ${data.access === 'app-oauth' ? 'App-authorized' : 'Public JSON'}`}</span><span>Access remains subject to Reddit’s permissions and rate limits.</span></footer>
+      </>}
     </main>
   </>;
 }

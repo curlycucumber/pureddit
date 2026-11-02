@@ -9,7 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "test": "npm run test:deployment && npm run test:server && npm run test:browser",
     "test:deployment": "node --test tests/deployment.test.mjs",
-    "test:server": "tsx --test tests/server.test.ts",
+    "test:server": "tsx --test tests/server.test.ts tests/headline-import.test.ts",
     "test:browser": "playwright test"
   },
   "dependencies": {
