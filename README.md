@@ -1,4 +1,4 @@
-# PUREDDIT
+# Pureddit
 
 Reddit, with room to breathe. A responsive React and TypeScript client with a subscription-only Home feed, separate Popular and News feeds, and a compact interface inspired by old.reddit.com.
 
@@ -42,13 +42,13 @@ Connect `curlycucumber/PUREDDIT` to Vercel with `main` as the production branch 
    | `REDDIT_USER_AGENT` | A descriptive Reddit API user agent, e.g. `web:pureddit:0.2.0 (by /u/YOUR_REDDIT_USERNAME)` |
 
 4. Redeploy the Vercel project after saving the variables. These are **Vercel runtime settings**; adding variables to a Codex cloud workspace does not configure Vercel.
-5. Choose **Sign in with Reddit → Continue to Reddit**, authorize on Reddit's website, and return to PUREDDIT. Verify your username, communities, Home feed, saved posts, and profile. Check a reversible vote before intentionally posting content. Authorization and account writes could not be verified against a real account during development because credentials were unavailable.
+5. Choose **Sign in with Reddit → Continue to Reddit**, authorize on Reddit's website, and return to Pureddit. Verify your username, communities, Home feed, saved posts, and profile. Check a reversible vote before intentionally posting content. Authorization and account writes could not be verified against a real account during development because credentials were unavailable.
 
 For a custom domain, update both the registered Reddit redirect and `REDDIT_REDIRECT_URI` to the same exact origin and callback path. Preview deployments need a separately registered callback and appropriate preview credentials. Production cookies are host-only, Secure, HttpOnly, and SameSite=Lax.
 
 ## Connected account behavior
 
-- **Account:** Reddit OAuth authorization-code flow, profile username/karma/account age, automatic access-token refresh, and sign-out with token revocation. PUREDDIT never collects your Reddit password.
+- **Account:** Reddit OAuth authorization-code flow, profile username/karma/account age, automatic access-token refresh, and sign-out with token revocation. Pureddit never collects your Reddit password.
 - **Home:** newest posts by default, filtered on the server against the complete returned subscription list. Empty subscriptions do not fall back to default or recommended communities. Promoted posts are removed.
 - **Popular:** Reddit's popular listing. **News:** `r/news`, not Reddit's proprietary News tab. Both pages fetch live listings while signed out through Reddit's public JSON endpoints, and use OAuth when signed in. Public access can be blocked or rate-limited by Reddit; errors are shown without substituting demo posts. Reading public post discussions works without sign-in; account actions still require authorization.
 - **Sorting:** Reddit New/Hot/Top (Top uses the past week). No client-side recommendation system. Listing cursors provide a Load more posts button.

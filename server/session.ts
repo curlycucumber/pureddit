@@ -67,7 +67,7 @@ export function validState(a: string, b: string) {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 export function sameOrigin(req: Request) {
-  if (req.headers.origin !== configuration().origin || req.headers['x-pureddit-request'] !== '1' || !req.headers['content-type']?.startsWith('application/json')) throw new ApiError(403, 'This request must come from PUREDDIT.');
+  if (req.headers.origin !== configuration().origin || req.headers['x-pureddit-request'] !== '1' || !req.headers['content-type']?.startsWith('application/json')) throw new ApiError(403, 'This request must come from Pureddit.');
 }
 export async function body(req: Request): Promise<Record<string, unknown>> {
   let value = req.body;
