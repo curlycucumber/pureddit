@@ -50,7 +50,7 @@ For a custom domain, update both the registered Reddit redirect and `REDDIT_REDI
 
 - **Account:** Reddit OAuth authorization-code flow, profile username/karma/account age, automatic access-token refresh, and sign-out with token revocation. PUREDDIT never collects your Reddit password.
 - **Home:** newest posts by default, filtered on the server against the complete returned subscription list. Empty subscriptions do not fall back to default or recommended communities. Promoted posts are removed.
-- **Popular:** Reddit's popular listing. **News:** an explicit combination of `r/news` and `r/worldnews`, not Reddit's proprietary News tab.
+- **Popular:** Reddit's popular listing. **News:** `r/news`, not Reddit's proprietary News tab. Both pages fetch live listings while signed out through Reddit's public JSON endpoints, and use OAuth when signed in. Public access can be blocked or rate-limited by Reddit; errors are shown without substituting demo posts. Reading public post discussions works without sign-in; account actions still require authorization.
 - **Sorting:** Reddit New/Hot/Top (Top uses the past week). No client-side recommendation system. Listing cursors provide a Load more posts button.
 - **Communities:** real subscriptions, searchable discovery, join/leave actions, individual feeds, and five unique recently visited communities. Recents are stored separately per account in browser storage; Reddit subscriptions remain on Reddit.
 - **Posts:** live discussions, Markdown, reversible votes, save/unsave, text/link submission, deletion of your own posts/comments, your submitted-post listing, and original Reddit share links.

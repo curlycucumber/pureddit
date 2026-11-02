@@ -126,9 +126,11 @@ export default function App() {
   }, [toast]);
 
   const section = route.split('/')[1];
+  const remote = live || ['popular', 'news'].includes(section) || (section === 'post' && /^[a-z0-9]+$/.test(route.split('/')[2] || ''));
+  const visibleStore = remote ? liveStore : store;
   const communityName = section === 'r' ? route.split('/')[2] : undefined;
   const community = communityName ? communities.find(c => c.name === communityName) || (live ? getCommunity(communityName) : undefined) : undefined;
-  const selectedPost = section === 'post' ? store.posts.find(p => p.id === route.split('/')[2]) : undefined;
+  const selectedPost = section === 'post' ? visibleStore.posts.find(p => p.id === route.split('/')[2]) : undefined;
   const query = section === 'search' ? route.slice('/search/'.length) : '';
   const activeCommunity = selectedPost ? communities.find(c => c.name === selectedPost.community) || getCommunity(selectedPost.community) : community;
 
@@ -181,7 +183,7 @@ export default function App() {
     return () => controller.abort();
   }, [reddit.user?.id, refresh]);
   useEffect(() => {
-    if (!live) return;
+    if (!remote) return;
     const controller = new AbortController();
     setAfter(null); setLiveError('');
     if (section === 'communities') { setLiveLoading(false); return; }
@@ -219,6 +221,7 @@ export default function App() {
   }, [reddit.user?.id, liveStore.recent, recentReady]);
 
   function vote(id: string, direction: Vote) {
+    if (remote && !live) { setModal('account'); return; }
     if (live) {
       const item = store.posts.find(post => post.id === id) || store.posts.flatMap(post => post.comments).find(comment => comment.id === id);
       if (!item?.redditName) return;
@@ -227,6 +230,7 @@ export default function App() {
     setStore(previous => ({ ...previous, votes: { ...previous.votes, [id]: previous.votes[id] === direction ? 0 : direction } }));
   }
   function toggleSaved(id: string) {
+    if (remote && !live) { setModal('account'); return; }
     if (live) {
       const post = store.posts.find(post => post.id === id); if (!post?.redditName) return;
       const saved = store.saved.includes(id);
@@ -235,6 +239,7 @@ export default function App() {
     setStore(previous => ({ ...previous, saved: previous.saved.includes(id) ? previous.saved.filter(item => item !== id) : [...previous.saved, id] }));
   }
   function toggleSubscription(name: string) {
+    if (remote && !live) { setModal('account'); return; }
     const leaving = store.subscriptions.includes(name);
     if (live) {
       void perform(`subscribe:${name}`, async () => { await action({ action: 'subscribe', community: name, join: !leaving }); setLiveStore(previous => ({ ...previous, subscriptions: leaving ? previous.subscriptions.filter(item => item !== name) : [...previous.subscriptions, name] })); setToast(leaving ? `Left r/${name} on Reddit.` : `Joined r/${name} on Reddit.`); setRefresh(previous => previous + 1); }); return;
@@ -243,15 +248,17 @@ export default function App() {
     setToast(leaving ? `Left r/${name}. Your Home feed has been updated.` : `Joined r/${name}. Welcome to your Home feed.`);
   }
   function openCompose() {
+    if (remote && !live) { setModal('account'); return; }
     setComposeCommunity(activeCommunity?.name || store.subscriptions[0] || communities[0]?.name || '');
     setComposeError(''); setModal('compose');
   }
   async function share(post: Post) {
-    try { await navigator.clipboard.writeText(live && post.permalink ? post.permalink : `${location.origin}${location.pathname}#/post/${post.id}`); setToast(live ? 'Reddit post link copied.' : post.author === username ? 'Local post link copied. This post is available only in this browser.' : 'Post link copied. Sample posts open in other demo sessions.'); }
+    try { await navigator.clipboard.writeText(remote && post.permalink ? post.permalink : `${location.origin}${location.pathname}#/post/${post.id}`); setToast(remote ? 'Reddit post link copied.' : post.author === username ? 'Local post link copied. This post is available only in this browser.' : 'Post link copied. Sample posts open in other demo sessions.'); }
     catch { setToast('Copy the post link from your browser’s address bar.'); go(`/post/${post.id}`); }
   }
   function addComment(event: FormEvent, parent?: string) {
     event.preventDefault();
+    if (remote && !live) { setModal('account'); return; }
     const body = (parent ? replyBody : commentBody).trim();
     if (!body || !selectedPost) return;
     if (live) {
@@ -264,6 +271,7 @@ export default function App() {
     setCommentBody(''); setReplyBody(''); setReplyTo(null); setToast('Your comment was added to this local demo.');
   }
   function deleteComment(id: string) {
+    if (remote && !live) { setModal('account'); return; }
     if (!selectedPost) return;
     if (live) {
       const comment = selectedPost.comments.find(item => item.id === id); if (!comment?.redditName) return;
@@ -273,6 +281,7 @@ export default function App() {
   }
   function submitPost(event: FormEvent) {
     event.preventDefault();
+    if (remote && !live) { setModal('account'); return; }
     if (!composeTitle.trim()) { setComposeError('Give your post a title.'); return; }
     if (postKind === 'Link') {
       try { const url = new URL(composeUrl); if (!['https:', 'http:'].includes(url.protocol)) throw new Error(); }
@@ -288,12 +297,13 @@ export default function App() {
   }
 
   function deletePost(post: Post) {
+    if (remote && !live) { setModal('account'); return; }
     const remove = () => setStore(previous => ({ ...previous, posts: previous.posts.filter(p => p.id !== post.id), saved: previous.saved.filter(id => id !== post.id) }));
     if (live && post.redditName) { void perform(post.id, async () => { await action({ action: 'delete', id: post.redditName }); remove(); setToast('Your Reddit post was deleted.'); }); }
     else { remove(); setToast('Your local post was deleted.'); }
   }
-  let feed = live ? store.posts : store.posts.filter(p => section === 'popular' ? true : section === 'news' ? p.news : section === 'r' ? p.community === community?.name : section === 'saved' ? store.saved.includes(p.id) : section === 'search' ? `${p.title} ${p.body || ''} ${p.community}`.toLowerCase().includes(query.toLowerCase()) : store.subscriptions.includes(p.community));
-  if (!live) feed = [...feed].sort((a, b) => sort === 'New' ? b.created - a.created : sort === 'Top' ? (b.score + (store.votes[b.id] || 0)) - (a.score + (store.votes[a.id] || 0)) : (b.score + (store.votes[b.id] || 0)) / Math.pow((Date.now() - b.created) / 3600000 + 2, 1.8) - (a.score + (store.votes[a.id] || 0)) / Math.pow((Date.now() - a.created) / 3600000 + 2, 1.8));
+  let feed = remote ? visibleStore.posts : store.posts.filter(p => section === 'popular' ? true : section === 'news' ? p.news : section === 'r' ? p.community === community?.name : section === 'saved' ? store.saved.includes(p.id) : section === 'search' ? `${p.title} ${p.body || ''} ${p.community}`.toLowerCase().includes(query.toLowerCase()) : store.subscriptions.includes(p.community));
+  if (!remote) feed = [...feed].sort((a, b) => sort === 'New' ? b.created - a.created : sort === 'Top' ? (b.score + (store.votes[b.id] || 0)) - (a.score + (store.votes[a.id] || 0)) : (b.score + (store.votes[b.id] || 0)) / Math.pow((Date.now() - b.created) / 3600000 + 2, 1.8) - (a.score + (store.votes[a.id] || 0)) / Math.pow((Date.now() - a.created) / 3600000 + 2, 1.8));
   const followed = communities.filter(c => store.subscriptions.includes(c.name));
   const isKnownRoute = ['home', 'popular', 'news', 'saved', 'search', 'communities', 'profile'].includes(section) || !!community || !!selectedPost;
 
@@ -304,7 +314,7 @@ export default function App() {
   }
   function postRow(post: Post) {
     return <article className={`post-row ${compact ? 'compact' : ''}`} key={post.id} data-testid="post" aria-label={post.title}>
-      <VoteControl id={post.id} score={post.score} vote={store.votes[post.id] || 0} onVote={vote} />
+      <VoteControl id={post.id} score={post.score} vote={visibleStore.votes[post.id] || 0} onVote={vote} />
       {!compact && <a className={`post-thumbnail ${post.image ? '' : 'text-thumbnail'}`} href={`#/post/${post.id}`} tabIndex={-1} aria-hidden="true">
         {post.image ? <img loading="lazy" src={post.image} alt="" style={{ objectPosition: post.imagePosition }} /> : post.url ? <LinkIcon size={26} /> : <List size={27} strokeWidth={1.2} />}
       </a>}
@@ -327,7 +337,7 @@ export default function App() {
     return <article className={`comment ${depth ? 'nested-comment' : ''}`} key={comment.id} aria-label={`Comment by ${comment.author}`}>
       <div className="comment-meta"><span className={`avatar ${comment.author === username ? 'you-avatar' : ''}`}>{comment.author === username ? username[0] : comment.author.slice(0, 1)}</span><strong>u/{comment.author}</strong>{comment.author === username && <span className="you-label">you</span>}<span>· {timeAgo(comment.created)} ago</span></div>
       <div className="comment-body"><RedditText>{comment.body}</RedditText></div>
-      {!deleted && <div className="comment-actions"><VoteControl horizontal id={comment.id} score={comment.score} vote={store.votes[comment.id] || 0} onVote={vote} /><button onClick={() => { setReplyTo(replyTo === comment.id ? null : comment.id); setReplyBody(''); }}><MessageCircle size={14} />Reply</button>{comment.author === username && <button aria-label="Delete your comment" onClick={() => deleteComment(comment.id)}><Trash2 size={14} />Delete</button>}</div>}
+      {!deleted && <div className="comment-actions"><VoteControl horizontal id={comment.id} score={comment.score} vote={visibleStore.votes[comment.id] || 0} onVote={vote} /><button onClick={() => { setReplyTo(replyTo === comment.id ? null : comment.id); setReplyBody(''); }}><MessageCircle size={14} />Reply</button>{comment.author === username && <button aria-label="Delete your comment" onClick={() => deleteComment(comment.id)}><Trash2 size={14} />Delete</button>}</div>}
       {replyTo === comment.id && <form className="reply-form" onSubmit={event => addComment(event, comment.id)}><label className="sr-only" htmlFor="reply-body">Your reply</label><textarea id="reply-body" autoFocus required maxLength={10000} value={replyBody} onChange={event => setReplyBody(event.target.value)} placeholder={`Reply to u/${comment.author}…`} /><div><button className="plain-button" type="button" onClick={() => setReplyTo(null)}>Cancel</button><button className="button primary small-button" disabled={!replyBody.trim() || pending.includes('comment')} type="submit">Reply</button></div></form>}
       {selectedPost?.comments.filter(c => c.parent === comment.id).map(c => renderComment(c, depth + 1))}
     </article>;
@@ -359,7 +369,7 @@ export default function App() {
       {storageError && <div className="storage-warning" role="alert">Browser storage is unavailable. Changes will last for this session only.</div>}
       <main className="main-content" id="main-content" tabIndex={-1}>
         {reddit.error && modal !== 'account' && <div className="account-service-error" role="alert">{reddit.error} <button onClick={() => setModal('account')}>Account settings</button></div>}
-        {reddit.checking || (live && liveLoading) ? <div className="empty-state" role="status"><Leaf size={28} /><h2>Loading from Reddit…</h2><p>Your communities. Your conversations.</p></div> : live && liveError ? <div className="empty-state" role="alert"><CircleHelp size={28} /><h2>Couldn’t load Reddit.</h2><p>{liveError}</p><button className="button" onClick={() => setRefresh(previous => previous + 1)}>Try again</button><button className="plain-button" onClick={() => setModal('account')}>Account settings</button></div> : !isKnownRoute ? <div className="empty-state"><Compass size={32} /><h1>Nothing at this address.</h1><p>{live ? "This post or community could not be found." : "This post or community isn’t in this demo."}</p><a className="button primary" href="#/home">Back to Home</a></div> : section === 'communities' ? <>
+        {reddit.checking || (remote && liveLoading) ? <div className="empty-state" role="status"><Leaf size={28} /><h2>Loading from Reddit…</h2><p>Your communities. Your conversations.</p></div> : remote && liveError ? <div className="empty-state" role="alert"><CircleHelp size={28} /><h2>Couldn’t load Reddit.</h2><p>{liveError}</p><button className="button" onClick={() => setRefresh(previous => previous + 1)}>Try again</button><button className="plain-button" onClick={() => setModal('account')}>Account settings</button></div> : !isKnownRoute ? <div className="empty-state"><Compass size={32} /><h1>Nothing at this address.</h1><p>{live ? "This post or community could not be found." : "This post or community isn’t in this demo."}</p><a className="button primary" href="#/home">Back to Home</a></div> : section === 'communities' ? <>
           <div className="page-heading"><h1>Your communities</h1><p>Browse your subscriptions or find a community.</p></div>
           <div className="community-toolbar"><span>{followed.length} joined · {communities.length} to explore</span><div className="community-search"><Search size={16} /><input aria-label="Filter communities" value={communitySearch} onChange={event => setCommunitySearch(event.target.value)} placeholder="Find a community" /></div></div>
           <div className="community-grid">{communities.filter(c => `${c.name} ${c.category}`.toLowerCase().includes(communitySearch.toLowerCase())).map(c => <article className="community-card" key={c.name}><div className="community-card-top"><CommunityIcon name={c.name} /><button className={`button join-button ${store.subscriptions.includes(c.name) ? 'joined' : ''}`} aria-label={`${store.subscriptions.includes(c.name) ? 'Leave' : 'Join'} r/${c.name}`} onClick={() => toggleSubscription(c.name)}>{store.subscriptions.includes(c.name) ? <><Check size={14} />Joined</> : <><Plus size={14} />Join</>}</button></div><a href={`#/r/${c.name}`}><h2>r/{c.name}</h2></a><p>{c.description}</p><div className="community-card-bottom"><span>{c.members} members</span><span>{c.category}</span></div></article>)}</div>
@@ -372,17 +382,17 @@ export default function App() {
             {selectedPost.image && <img className="detail-image" src={selectedPost.image} alt={`Image shared with “${selectedPost.title}”`} />}
             {selectedPost.url && <a className="external-post-link" href={selectedPost.url} target="_blank" rel="noopener noreferrer"><LinkIcon size={18} />{selectedPost.url}<ExternalLink size={15} /></a>}
             {selectedPost.body && <div className="post-body"><RedditText>{selectedPost.body}</RedditText></div>}
-            <div className="detail-actions"><VoteControl horizontal id={selectedPost.id} score={selectedPost.score} vote={store.votes[selectedPost.id] || 0} onVote={vote} /><span className="detail-comments-count"><MessageCircle size={16} />{selectedPost.commentCount} comments</span><button className={store.saved.includes(selectedPost.id) ? 'is-saved' : ''} onClick={() => toggleSaved(selectedPost.id)}><Bookmark size={16} />{store.saved.includes(selectedPost.id) ? 'Saved' : 'Save'}</button><button onClick={() => share(selectedPost)}><Share2 size={16} />Share</button></div>
+            <div className="detail-actions"><VoteControl horizontal id={selectedPost.id} score={selectedPost.score} vote={visibleStore.votes[selectedPost.id] || 0} onVote={vote} /><span className="detail-comments-count"><MessageCircle size={16} />{selectedPost.commentCount} comments</span><button className={store.saved.includes(selectedPost.id) ? 'is-saved' : ''} onClick={() => toggleSaved(selectedPost.id)}><Bookmark size={16} />{store.saved.includes(selectedPost.id) ? 'Saved' : 'Save'}</button><button onClick={() => share(selectedPost)}><Share2 size={16} />Share</button></div>
           </article>
-          <section className="comments-section"><div className="comments-heading"><h2>The conversation</h2><span>{selectedPost.commentCount} comments</span></div><form className="comment-form" onSubmit={event => addComment(event)}><label htmlFor="comment-body">Comment as <strong>u/{username}</strong></label><textarea id="comment-body" required maxLength={10000} value={commentBody} onChange={event => setCommentBody(event.target.value)} placeholder="Add something to the conversation…" /><div className="comment-form-footer"><span>Keep it kind. Keep it human.</span><button className="button primary small-button" type="submit" disabled={!commentBody.trim() || pending.includes('comment')}><Send size={14} />Comment</button></div></form><p className="sample-note">{live ? <>Comments are live from Reddit. {selectedPost.moreComments && <a href={selectedPost.permalink} target="_blank" rel="noopener noreferrer">Open the full thread on Reddit for additional comments.</a>}</> : 'Local demo · Sample threads include a preview of the comments. New comments stay in this browser.'}</p><div className="comment-list">{selectedPost.comments.filter(c => !c.parent).map(c => renderComment(c))}{!selectedPost.comments.length && <div className="empty-state"><MessageCircle size={28} /><h3>Start the conversation.</h3><p>Good discussions start with a little curiosity.</p></div>}</div></section>
+          <section className="comments-section"><div className="comments-heading"><h2>The conversation</h2><span>{selectedPost.commentCount} comments</span></div><form className="comment-form" onSubmit={event => addComment(event)}><label htmlFor="comment-body">{remote && !live ? 'Sign in to comment' : <>Comment as <strong>u/{username}</strong></>}</label><textarea id="comment-body" required maxLength={10000} value={commentBody} onChange={event => setCommentBody(event.target.value)} placeholder="Add something to the conversation…" /><div className="comment-form-footer"><span>Keep it kind. Keep it human.</span><button className="button primary small-button" type="submit" disabled={!commentBody.trim() || pending.includes('comment')}><Send size={14} />Comment</button></div></form><p className="sample-note">{remote ? <>Comments are live from Reddit. {selectedPost.moreComments && <a href={selectedPost.permalink} target="_blank" rel="noopener noreferrer">Open the full thread on Reddit for additional comments.</a>}</> : 'Local demo · Sample threads include a preview of the comments. New comments stay in this browser.'}</p><div className="comment-list">{selectedPost.comments.filter(c => !c.parent).map(c => renderComment(c))}{!selectedPost.comments.length && <div className="empty-state"><MessageCircle size={28} /><h3>Start the conversation.</h3><p>Good discussions start with a little curiosity.</p></div>}</div></section>
         </> : <>
           <div className="page-heading">
             <div className="heading-title-row"><h1>{community ? `r/${community.name}` : section === 'popular' ? 'Popular' : section === 'news' ? 'News' : section === 'profile' ? `Posts by u/${username}` : section === 'saved' ? 'Saved posts' : section === 'search' ? `Results for “${query}”` : 'Home'}</h1>{community && <button className={`button join-button ${store.subscriptions.includes(community.name) ? 'joined' : ''}`} onClick={() => toggleSubscription(community.name)}>{store.subscriptions.includes(community.name) ? <><Check size={15} />Joined</> : <><Plus size={15} />Join community</>}</button>}</div>
-            <p>{community ? community.description : section === 'popular' ? 'Posts from across Reddit.' : section === 'news' ? 'Posts from r/news and r/worldnews.' : section === 'profile' ? 'Your posts, directly from your Reddit account.' : section === 'saved' ? 'Posts you’ve saved.' : section === 'search' ? `${feed.length} posts found across all communities.` : 'Posts from your subscribed communities. No recommendations or ads.'}</p>
+            <p>{community ? community.description : section === 'popular' ? 'Posts from r/popular.' : section === 'news' ? 'Posts from r/news.' : section === 'profile' ? 'Your posts, directly from your Reddit account.' : section === 'saved' ? 'Posts you’ve saved.' : section === 'search' ? `${feed.length} posts found across all communities.` : 'Posts from your subscribed communities. No recommendations or ads.'}</p>
           </div>
           <div className="feed-toolbar"><div className="sort-tabs" aria-label="Sort posts">{(['New', 'Hot', 'Top'] as Sort[]).map(option => <button aria-pressed={sort === option} className={sort === option ? 'active' : ''} key={option} onClick={() => setSort(option)}>{option === 'New' ? <Sparkles size={15} /> : option === 'Hot' ? <Flame size={15} /> : <ArrowUp size={15} />}{option}</button>)}</div><div className="feed-tools"><span>{section === 'home' ? 'YOUR FEED' : community ? `${community.members} MEMBERS` : `${feed.length} POSTS`}</span><span className="toolbar-divider" /><button aria-label={compact ? 'Use comfortable view' : 'Use compact view'} aria-pressed={compact} title={compact ? 'Comfortable view' : 'Compact view'} onClick={() => setCompact(!compact)}><SlidersHorizontal size={17} /></button></div></div>
           <div className="feed">{feed.map(postRow)}{!feed.length && <div className="empty-state">{section === 'saved' ? <Bookmark size={30} /> : section === 'search' ? <Search size={30} /> : <Leaf size={30} />}<h2>{section === 'saved' ? 'Keep the good ones.' : section === 'search' ? 'Nothing here just yet.' : 'A fresh start.'}</h2><p>{section === 'saved' ? 'Save a post and it’ll be waiting right here.' : section === 'search' ? 'Try a different word or search for a community.' : 'Join a community or start a conversation of your own.'}</p><button className="button" onClick={() => go('/communities')}>Explore communities<ArrowRight size={15} /></button></div>}</div>
-          {live && after ? <div className="load-more"><button className="button" disabled={pending.includes('load-more')} onClick={nextPage}>{pending.includes('load-more') ? 'Loading…' : 'Load more posts'}<ArrowDown size={14} /></button></div> : <p className="feed-end-label">End of feed</p>}
+          {remote && after ? <div className="load-more"><button className="button" disabled={pending.includes('load-more')} onClick={nextPage}>{pending.includes('load-more') ? 'Loading…' : 'Load more posts'}<ArrowDown size={14} /></button></div> : <p className="feed-end-label">End of feed</p>}
         </>}
         <footer className="content-footer"><span>PUREDDIT · Independent Reddit client</span><button onClick={() => setModal('about')}>{live ? 'About PUREDDIT' : 'About this demo'}<ExternalLink size={11} /></button></footer>
       </main>
@@ -390,7 +400,7 @@ export default function App() {
       <aside className="right-rail" aria-label="Feed information">
         <div className="about-card"><div className="about-card-body"><h2>{activeCommunity ? `r/${activeCommunity.name}` : 'About PUREDDIT'}</h2><p>{activeCommunity?.description || 'A Reddit client with a subscription-only Home feed and familiar post and comment controls.'}</p>{activeCommunity ? <div className="community-stat"><strong>{activeCommunity.members}</strong><span>community members</span></div> : null}<button className="button primary full-width" onClick={openCompose}><Plus size={16} />Create a post</button></div></div>
         <div className="small-rail-card"><div className="rail-card-heading"><h3>{activeCommunity ? 'Community guidelines' : 'Communities'}</h3></div><p>{activeCommunity ? 'Be thoughtful. Assume good intentions. Stay on topic and give people room to disagree.' : 'Manage your subscriptions or search for a subreddit.'}</p><a href="#/communities">Explore communities<ArrowRight size={14} /></a></div>
-        <div className="demo-note"><span className="status-dot" /><div><strong>{live ? `Connected as u/${username}` : 'Demo mode'}</strong><p>{live ? 'Your feed and actions are connected to your Reddit account.' : 'Votes, posts, and comments are saved in this browser, not sent to Reddit.'}</p>{!live && <button onClick={() => setModal('account')}>Sign in with Reddit<ArrowRight size={12} /></button>}<button onClick={() => setModal('about')}>About PUREDDIT<ChevronRight size={12} /></button></div></div>
+        <div className="demo-note"><span className="status-dot" /><div><strong>{live ? `Connected as u/${username}` : remote ? 'Public Reddit feed' : 'Demo mode'}</strong><p>{live ? 'Your feed and actions are connected to your Reddit account.' : remote ? 'Posts are loaded from Reddit. Sign in to vote, save, comment, or post.' : 'Votes, posts, and comments are saved in this browser, not sent to Reddit.'}</p>{!live && <button onClick={() => setModal('account')}>Sign in with Reddit<ArrowRight size={12} /></button>}<button onClick={() => setModal('about')}>About PUREDDIT<ChevronRight size={12} /></button></div></div>
         <div className="rail-footer"><span>PUREDDIT © {new Date().getFullYear()}</span></div>
       </aside>
     </div>

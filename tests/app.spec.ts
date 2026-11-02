@@ -1,7 +1,18 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { initialPosts } from '../src/data';
 
-test.beforeEach(async ({ page }) => { await page.goto('/'); });
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/reddit?**', async route => {
+    const query = new URL(route.request().url()).searchParams;
+    const resource = query.get('resource');
+    if (!['popular', 'news'].includes(resource || '')) { await route.continue(); return; }
+    let posts = initialPosts.filter(post => resource === 'popular' || post.community === 'news');
+    if (query.get('sort') === 'top') posts = [...posts].sort((a, b) => b.score - a.score);
+    await route.fulfill({ json: { posts, after: null } });
+  });
+  await page.goto('/');
+});
 
 test('Home includes only followed communities; joining and leaving updates it persistently', async ({ page }) => {
   await expect(page.getByTestId('post')).toHaveCount(9);
@@ -25,8 +36,8 @@ test('Popular and News are distinct feeds, and Top changes ordering', async ({ p
   await page.getByRole('button', { name: 'Top', exact: true }).click();
   await expect(page.getByTestId('post').first()).toContainText('No signal, no plans.');
   await page.getByRole('link', { name: 'News', exact: true }).click();
-  await expect(page.getByTestId('post')).toHaveCount(2);
-  await expect(page.getByTestId('post').first()).toContainText('worldnews');
+  await expect(page.getByTestId('post')).toHaveCount(1);
+  await expect(page.getByTestId('post').first()).toContainText('Local libraries');
 });
 
 test('votes toggle, switch direction, and persist; saved posts can be removed', async ({ page }) => {

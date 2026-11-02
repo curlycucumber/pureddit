@@ -132,3 +132,44 @@ test('mobile account access is visible and sign-out restores the separate demo',
   await expect(page.getByTestId('post')).toHaveCount(9);
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
 });
+
+test('signed-out visitors read live Popular/News and discussions; account actions require sign-in', async ({ page }) => {
+  const reads: string[] = []; const writes: unknown[] = [];
+  await page.route('**/api/auth/session', route => route.fulfill({ json: { configured: true, authenticated: false } }));
+  await page.route('**/api/reddit?**', async route => {
+    const query = new URL(route.request().url()).searchParams;
+    reads.push(query.toString());
+    const item = { ...makePost(query.has('after') ? 'next123' : 'abc123'), vote: 0, community: query.get('resource') === 'news' ? 'news' : 'knitting' };
+    await route.fulfill({ json: query.get('resource') === 'post' ? { post: item } : { posts: [item], after: query.has('after') ? null : 't3_next123' } });
+  });
+  await page.route('**/api/reddit', async route => { writes.push(route.request().postDataJSON()); await route.fulfill({ json: { success: true } }); });
+  await page.goto('/#/popular');
+  await expect(page.getByTestId('post')).toHaveCount(1);
+  await expect(page.getByTestId('post')).toContainText('A real account post abc123');
+  await page.getByRole('button', { name: 'Top', exact: true }).click();
+  await expect.poll(() => reads.some(query => query.includes('resource=popular') && query.includes('sort=top'))).toBe(true);
+  await page.getByRole('button', { name: 'Load more posts' }).click();
+  await expect(page.getByTestId('post')).toHaveCount(2);
+  await page.locator('.post-title').first().click();
+  await expect(page.locator('.post-body strong')).toHaveText('thoughtful');
+  await page.getByRole('button', { name: 'Upvote', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Sign in to Reddit' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByLabel('Sign in to comment').fill('This needs authorization');
+  await page.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(writes).toEqual([]);
+  await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('link', { name: 'News', exact: true }).click();
+  await expect(page.getByTestId('post')).toHaveCount(1);
+  await expect(page.getByTestId('post')).toContainText('r/news');
+  expect(reads.some(query => query.includes('resource=news'))).toBe(true);
+});
+
+test('public-feed failures display an error instead of bundled demo posts', async ({ page }) => {
+  await page.route('**/api/reddit?**', route => route.fulfill({ status: 403, json: { error: 'Reddit blocked public access. Sign in with Reddit.' } }));
+  await page.goto('/#/news');
+  await expect(page.getByRole('alert')).toContainText('blocked public access');
+  await expect(page.getByTestId('post')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Account settings', exact: true })).toBeVisible();
+});

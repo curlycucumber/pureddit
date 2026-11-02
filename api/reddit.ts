@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import { ApiError, body, fail, headers, json, readSession, redditFetch, sameOrigin, type Request, type Session } from '../server/session.ts';
 import { comments, community, listing, post } from '../server/normalize.ts';
+import { publicReddit } from '../server/public-reddit.ts';
 
 function text(value: unknown, name: string, max: number, pattern?: RegExp) {
   if (typeof value !== 'string' || !value.trim() || value.length > max || (pattern && !pattern.test(value))) throw new ApiError(400, `Invalid ${name}.`);
@@ -21,8 +22,27 @@ async function subscriptions(session: Session, res: ServerResponse) {
 export default async function handler(req: Request, res: ServerResponse) {
   headers(res);
   try {
-    const session = readSession(req);
-    if (!session) throw new ApiError(401, 'Sign in to Reddit to use your account.');
+    let session: Session | null = null;
+    try { session = readSession(req); } catch (error) { if (!(error instanceof ApiError && error.status === 503)) throw error; }
+    if (!session) {
+      const query = new URL(req.url || '/', 'http://localhost').searchParams;
+      const resource = query.get('resource');
+      if (req.method !== 'GET' || !['popular', 'news', 'post'].includes(resource || '')) throw new ApiError(401, 'Sign in to Reddit to use your account.');
+      if (resource === 'post') {
+        const id = text(query.get('id'), 'post', 30, /^[a-z0-9]+$/);
+        const data = await publicReddit(`/comments/${id}?raw_json=1&limit=100`);
+        const item = data?.[0]?.data?.children?.[0]?.data;
+        if (!item) throw new ApiError(404, 'This post is no longer available.');
+        const thread = comments(data[1]);
+        json(res, 200, { post: { ...post(item), comments: thread.comments, moreComments: thread.more } }); return;
+      }
+      const sort = query.get('sort') || 'new';
+      if (!['new', 'hot', 'top'].includes(sort)) throw new ApiError(400, 'Invalid sort order.');
+      const after = query.get('after');
+      if (after && !/^t3_[a-z0-9]+$/.test(after)) throw new ApiError(400, 'Invalid pagination cursor.');
+      const options = new URLSearchParams({ raw_json: '1', limit: '50', ...(after ? { after } : {}), ...(sort === 'top' ? { t: 'week' } : {}) });
+      json(res, 200, listing(await publicReddit(`/r/${resource}/${sort}?${options}`))); return;
+    }
     if (req.method === 'GET') {
       const query = new URL(req.url || '/', 'http://localhost').searchParams;
       const resource = query.get('resource');
@@ -57,7 +77,7 @@ export default async function handler(req: Request, res: ServerResponse) {
         if (!joined.size) { json(res, 200, { posts: [], after: null }); return; }
         path = `/${sort}?${options}`;
       } else if (resource === 'popular') path = `/r/popular/${sort}?${options}`;
-      else if (resource === 'news') path = `/r/news+worldnews/${sort}?${options}`;
+      else if (resource === 'news') path = `/r/news/${sort}?${options}`;
       else if (resource === 'community-feed') path = `/r/${text(query.get('name'), 'community', 64, namePattern)}/${sort}?${options}`;
       else if (resource === 'saved') path = `/user/${encodeURIComponent(session.user.name)}/saved?${options}`;
       else if (resource === 'profile') path = `/user/${encodeURIComponent(session.user.name)}/submitted?${options}`;

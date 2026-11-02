@@ -102,7 +102,7 @@ test('expired access refreshes securely; expired or revoked sessions cannot make
   assert.equal(response.status, 200); assert.ok(response.headers.get('set-cookie')); assert.ok(calls[0].url.endsWith('/access_token'));
   assert.equal((calls[1].options!.headers as Record<string, string>).Authorization, 'Bearer new-test-access');
   const expired = session(); expired.until = Date.now() - 1;
-  assert.equal((await fetch(`${base}/api/reddit?resource=popular`, { headers: { Cookie: sessionCookie(expired) } })).status, 401);
+  assert.equal((await fetch(`${base}/api/reddit?resource=home`, { headers: { Cookie: sessionCookie(expired) } })).status, 401);
   respond = () => Response.json({}, { status: 401 });
   const revoked = await fetch(`${base}/api/auth/session`, { headers: { Cookie: sessionCookie() } });
   const data = await revoked.json(); assert.equal(data.configured, true); assert.equal(data.authenticated, false); assert.match(data.error, /expired/);
@@ -155,4 +155,40 @@ test('normalization preserves nested comments and vote baselines without exposin
   assert.equal(listing({ data: { children: [thing('a'), thing('b', 'books', { promoted: true })] } }).posts.length, 1);
   const thread = comments({ data: { children: [{ kind: 't1', data: { id: 'one', author: 'reader', body: '<script>not HTML</script>', score: 5, created_utc: 1700000000, replies: { data: { children: [{ kind: 't1', data: { id: 'two', author: 'other', body: 'Reply', score: 2, created_utc: 1700000000 } }, { kind: 'more', data: {} }] } } } }] } });
   assert.equal(thread.comments[1].parent, 'one'); assert.equal(thread.more, true); assert.equal(thread.comments[0].body, '<script>not HTML</script>');
+});
+
+
+test('Popular and News use the exact requested OAuth sources with sort and cursor', async () => {
+  respond = () => Response.json({ data: { children: [thing('a')], after: 't3_next' } });
+  for (const resource of ['popular', 'news']) {
+    const response = await fetch(`${base}/api/reddit?resource=${resource}&sort=top&after=t3_next`, { headers: { Cookie: sessionCookie() } });
+    assert.equal(response.status, 200);
+    const url = new URL(calls.at(-1)!.url);
+    assert.equal(url.origin, 'https://oauth.reddit.com'); assert.equal(url.pathname, `/r/${resource}/top`);
+    assert.equal(url.searchParams.get('after'), 't3_next'); assert.equal(url.searchParams.get('t'), 'week');
+  }
+});
+
+test('anonymous live listings and discussions work without OAuth configuration; account actions stay protected', async () => {
+  delete process.env.REDDIT_CLIENT_SECRET;
+  respond = url => url.includes('/comments/') ? Response.json([{ data: { children: [thing('a')] } }, { data: { children: [] } }]) : Response.json({ data: { children: [thing('a'), thing('ad', 'books', { promoted: true })], after: 't3_next' } });
+  for (const resource of ['popular', 'news']) {
+    const response = await fetch(`${base}/api/reddit?resource=${resource}&sort=hot&after=t3_next`);
+    assert.equal(response.status, 200); assert.equal((await response.json()).posts.length, 1);
+    const call = calls.at(-1)!; const url = new URL(call.url);
+    assert.equal(url.origin, 'https://www.reddit.com'); assert.equal(url.pathname, `/r/${resource}/hot.json`);
+    assert.equal(url.searchParams.get('after'), 't3_next'); assert.equal((call.options!.headers as Record<string, string>).Authorization, undefined);
+  }
+  assert.equal((await fetch(`${base}/api/reddit?resource=post&id=a`)).status, 200);
+  assert.equal((await fetch(`${base}/api/reddit?resource=home`)).status, 401);
+  assert.equal((await fetch(`${base}/api/reddit?resource=news&sort=invalid`)).status, 400);
+  assert.equal((await fetch(`${base}/api/reddit?resource=news&after=invalid`)).status, 400);
+  assert.equal((await fetch(`${base}/api/reddit`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'vote', id: 't3_a', direction: 1 }) })).status, 401);
+});
+
+test('blocked public access returns the upstream failure without sample data', async () => {
+  respond = () => Response.json({}, { status: 403 });
+  const response = await fetch(`${base}/api/reddit?resource=popular`);
+  assert.equal(response.status, 403); const data = await response.json();
+  assert.match(data.error, /blocked public access/); assert.equal(data.posts, undefined);
 });
