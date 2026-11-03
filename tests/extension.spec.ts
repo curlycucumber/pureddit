@@ -426,3 +426,38 @@ test('Your Feed excludes unchanged suggested cards retained during a partial nat
   await harness(context,partial);await page.goto('https://www.reddit.com/');await inject(page);const reader=page.locator('#pureddit-extension-root');
   await expect(reader.getByRole('article')).toHaveCount(1);await expect(reader.getByText('From a followed community',{exact:true})).toBeVisible();await expect(reader.getByText('An old unmarked suggestion',{exact:true})).toHaveCount(0);
 });
+
+test('canceling a stalled feed switch restores the current feed immediately', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{const a=document.createElement('a');a.href='/r/popular/';a.textContent='Popular';a.onclick=e=>e.preventDefault();document.querySelector('#native')!.append(a);});
+  await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await reader.locator('.primary').getByRole('link',{name:'Popular',exact:true}).click();
+  await reader.locator('.primary').getByRole('link',{name:'News',exact:true}).click();
+  await expect(reader.locator('.primary a.active')).toHaveText('News');
+  await expect(reader.getByRole('link',{name:'A post already loaded on Reddit',exact:true})).toBeVisible();
+  await reader.locator('.primary').getByRole('link',{name:'Popular',exact:true}).click();
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').uncheck();
+  await expect(reader).toHaveCount(0);
+});
+
+test('native routing redirects with canonical query parameters do not stall the reader', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{const a=document.createElement('a');a.href='/r/popular/';a.textContent='Popular';a.onclick=e=>{e.preventDefault();history.pushState({},'', '/r/popular/?feed=popular');const card=document.querySelector('shreddit-post')!;card.setAttribute('post-title','Canonical destination story');card.setAttribute('permalink','/r/news/comments/canon1/title/');};document.querySelector('#native')!.append(a);});
+  await inject(page);const reader=page.locator('#pureddit-extension-root');await reader.locator('.primary').getByRole('link',{name:'Popular',exact:true}).click();
+  await expect(reader.getByRole('link',{name:'Canonical destination story',exact:true})).toBeVisible();
+});
+
+test('explicit native deselection overrides stale tab-selected CSS classes', async({context,page})=>{
+  await harness(context,homeFixture);await page.goto('https://www.reddit.com/');
+  await page.locator('[data-native-mode=following]').evaluate(node=>node.classList.add('tab-selected'));
+  await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await expect(page.locator('[data-native-mode=following]')).toHaveAttribute('aria-selected','true');
+  await expect(reader.getByRole('article')).toHaveCount(1);
+  await expect(reader.getByText('A For You-only community',{exact:true})).toHaveCount(0);
+});
+
+test('native-hidden cards are evicted from the reading cache', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  await page.locator('#native shreddit-post').first().evaluate(node=>{(node as HTMLElement).hidden=true;});
+  await expect(reader.getByRole('article')).toHaveCount(0);
+});

@@ -93,9 +93,9 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.3.7
+### Updating Chrome to 0.3.8
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.7** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.8** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
 
@@ -106,3 +106,5 @@ If a non-Home feed has no readable cards after six seconds, Pureddit exposes Red
 Version 0.3.6 dispatches navigation through Reddit’s native links/router instead of forcing `location.assign` for every feed/post. A normal browser navigation is the fallback when Reddit does not handle the link. Root discovery is cached across unrelated mutations; hover classes outside posts/tabs no longer trigger extraction. Route transitions exclude unchanged cards from the preceding feed. Post styling also overrides Reddit’s nested theme classes, keeping native editors and votes intact. These changes are tested against controlled native-router fixtures; live signed-in Reddit compatibility still requires checking on your browser.
 
 Version 0.3.7 labels the Home tabs **Your Feed** and **Suggested Feed**, mapped respectively to native Reddit **Following** and **For You**. Your Feed is always the startup/Home default. Test loading with Reddit initially on For You, choosing Suggested Feed, clicking Home again on the same URL, and reloading. None should make Suggested Feed the default. Native selection must be confirmed before displaying Your Feed; unrecognized native controls show an explanation instead of relabeling suggestions.
+
+Version 0.3.8 fixes cancellation of stalled navigation, redirected destinations with canonical query parameters, stale tab CSS overriding explicit deselection, and native-hidden cards remaining in the cache. Disabling the extension also cancels pending navigation immediately. Regression cases were reproduced before the fixes and pass afterward.

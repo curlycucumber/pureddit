@@ -21,7 +21,8 @@ async function start() {
   let rootsDirty = true; let cachedRoots: Array<Document | ShadowRoot> = [];
   const rootsNow = () => { if (rootsDirty) { cachedRoots = nativeRoots(); rootsDirty = false; } return cachedRoots; };
   let lastCards = new Map<Element,string>(); let routeCards = new Map<Element,string>();
-  let pendingUrl = '';
+  let pendingUrl = ''; let navigationTimer = 0;
+  function cancelNavigation() { clearTimeout(navigationTimer); navigationTimer = 0; pendingUrl = ''; departing = false; }
   let overflow: string | undefined;
   let homeMode: HomeMode = 'following'; let homeFeed: HomeFeed | undefined;
   const homeController = new HomeFeedController();
@@ -59,7 +60,7 @@ async function start() {
     preferences = normalizePreferences(next); refresh();
     try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
   }
-  function showOriginal() { loadingFallback = false; suppressed = true; restore(); skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
+  function showOriginal(keepNavigation = false) { if (!keepNavigation) cancelNavigation(); loadingFallback = false; suppressed = true; restore(); skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
     const control = nativeControl(action);
     nativeActive = true; showOriginal();
@@ -77,7 +78,8 @@ async function start() {
   }
   function navigate(url: string) {
     if (pageFromUrl(url)?.kind === 'home' && homeMode !== 'following') { homeMode = 'following'; homeController.reset(); }
-    if (url === location.href) { suppressed = false; refresh(); return; }
+    if (url === location.href) { cancelNavigation(); routeCards.clear(); rendered = ''; suppressed = false; refresh(); return; }
+    cancelNavigation();
     const next = pageFromUrl(url);
     if (next && ui) { ui.update({posts:[],filtered:0,excluded:[],layout:'unsupported',page:next,preferences,preview:false,homeFeed:next.kind==='home'?{mode:homeMode,status:'switching',message:'Opening Reddit Home…'}:undefined}); ui.message(`Opening ${next.title} on Reddit…`); }
     let link = nativeLink(url, rootsNow());
@@ -90,16 +92,15 @@ async function start() {
     }
     routeCards = cardSnapshot(rootsNow()); pendingUrl = url;
     restore();
-    if (!next && nativePage(url)) { nativeActive = true; showOriginal(); suppressed = false; }
+    if (!next && nativePage(url)) { nativeActive = true; showOriginal(true); suppressed = false; }
     const requested = pendingUrl;
-    window.setTimeout(() => { if (pendingUrl === requested && requested) { pendingUrl = ''; departing = false; refresh(); ui?.message('Reddit did not finish switching pages. Retry or use Show Reddit.'); } },10000);
+    navigationTimer = window.setTimeout(() => { if (pendingUrl === requested && requested) { cancelNavigation(); routeCards.clear(); rendered = ''; refresh(); ui?.message('Reddit did not finish switching pages. Retry or use Show Reddit.'); } },10000);
     if (link) {
       link.click(); if (temporary) link.remove();
       queueMicrotask(() => { rootsDirty = true; refresh(); });
       return;
     }
     departing = true;
-    window.setTimeout(() => { if (departing) { departing = false; refresh(); ui?.message('Reddit is taking longer to open this page. You can retry the feed tab or use Show Reddit.'); } }, 10000);
     location.assign(url);
   }
   function create() {
@@ -137,11 +138,21 @@ async function start() {
     toggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;';
     const shadow = toggle.attachShadow({ mode: 'open' }); const button = document.createElement('button');
     button.textContent = 'pureddit · Reading view'; button.style.cssText = 'font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;padding:12px 16px;border:1px solid #5f99cf;border-radius:6px;background:#cee3f8;color:#194b7c;cursor:pointer;box-shadow:0 2px 10px #0002;';
-    button.addEventListener('click', () => { pendingUrl = ''; departing = false; suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
+    button.addEventListener('click', () => { cancelNavigation(); rendered = ''; suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
   }
   function refresh() {
-    if (departing || pendingUrl && location.href.replace(/\/$/, '') !== pendingUrl.replace(/\/$/, '')) return;
-    if (location.href !== lastUrl) { const lastUrlBeforeChange = lastUrl; lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); if (pageFromUrl(location.href)?.kind === 'home') homeMode = 'following'; rootsDirty = true; routeCards = pageFromUrl(lastUrlBeforeChange) && pageFromUrl(location.href) ? (pendingUrl ? routeCards : lastCards) : new Map(); postCache.clear(); cacheKey = ''; rendered = ''; pendingUrl = ''; }
+    if (!preferences.enabled) cancelNavigation();
+    // A native router may canonicalize the destination or the user may press
+    // Back. Any real URL transition must release the pending-navigation guard.
+    if ((departing || pendingUrl) && location.href === lastUrl) return;
+    if (location.href !== lastUrl) {
+      const previousUrl = lastUrl, requested = Boolean(pendingUrl);
+      cancelNavigation(); lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset();
+      if (pageFromUrl(location.href)?.kind === 'home') homeMode = 'following';
+      rootsDirty = true;
+      routeCards = pageFromUrl(previousUrl) && pageFromUrl(location.href) ? (requested ? routeCards : lastCards) : new Map();
+      postCache.clear(); cacheKey = ''; rendered = '';
+    }
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? rootsNow() : [];
@@ -217,7 +228,7 @@ async function start() {
   });
   const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation);
-  window.addEventListener('pageshow', event => { pendingUrl = ''; departing = false; suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
+  window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   const poll = window.setInterval(() => {
@@ -237,7 +248,7 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); clearTimeout(emptyTimer); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); clearTimeout(emptyTimer); cancelNavigation(); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();

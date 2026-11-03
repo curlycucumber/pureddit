@@ -17,6 +17,8 @@ function label(element: Element) {
   return (element.getAttribute('aria-label') || element.textContent || '').replace(/\s+/g, ' ').trim();
 }
 function selected(element: Element) {
+  // Explicit native deselection wins over a stale visual highlight.
+  if (['aria-selected', 'aria-pressed', 'data-selected', 'data-active', 'selected', 'active'].some(name => element.getAttribute(name) === 'false')) return false;
   return element.hasAttribute('faceplate-tab-selected') || (element.matches('[role=tab]') && element.classList.contains('tab-selected')) || element.getAttribute('aria-selected') === 'true' || element.getAttribute('aria-pressed') === 'true' || ['page', 'true'].includes(element.getAttribute('aria-current') || '') || ['active', 'selected'].includes(element.getAttribute('data-state') || '') || (element.hasAttribute('selected') && element.getAttribute('selected') !== 'false') || element.getAttribute('data-selected') === 'true' || element.getAttribute('data-active') === 'true' || (element.hasAttribute('active') && element.getAttribute('active') !== 'false') || element.matches('input:checked');
 }
 function feedControl(mode: HomeMode, roots: Array<Document | ShadowRoot>) {

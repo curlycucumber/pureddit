@@ -96,3 +96,5 @@ Version 0.3.5 starts as soon as the document body exists, shows the destination 
 Version 0.3.6 uses Reddit’s native link navigation, caches open-root discovery, ignores unrelated hover-class mutations, and prevents stale cards from the preceding feed during a client-side route transition. Post-page palettes apply to nested Reddit theme containers. No Reddit application internals or private session state are invoked.
 
 Home uses **Your Feed** (Reddit’s Following) and **Suggested Feed** (Reddit’s For You). Your Feed is the default on startup and when returning Home. Selecting Suggested Feed is an explicit session action, not a saved default. The reader waits for native Following selection and changed content, and excludes unchanged cards retained from a prior suggested feed during the transition.
+
+Version 0.3.8 releases pending navigation on native redirects and explicit cancellation, honors explicit native tab deselection over stale highlights, and evicts hidden/excluded cards from the reader cache. The popup can disable Pureddit immediately during a stalled transition.
