@@ -89,12 +89,16 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Use Modern/Old and Light/Dark in the shared control bar below the header. Check all four combinations, compact classic rows/right sidebar on desktop, mobile Communities access, and persistence after refreshing. The same controls are present inside the Vercel preview.
 - Add/remove a local shortcut and visit six communities; only five recents should remain.
 - Choose Show Reddit, use a normal native account control, then return with Reading view.
-- Open a post, profile, notifications, and the post composer; their controls and content stay native, with Pureddit colors and a floating appearance bar. Modern/Old on these pages adjusts typography and spacing, rather than replacing Reddit’s editor or comment tree. Confirm native posting, editing, voting, and menus still work, then navigate back to a feed.
+- Open a post, profile, notifications, and the post composer; their controls and content stay native, with Pureddit colors and a persistent Pureddit header with appearance controls and feed links. Modern/Old on these pages adjusts typography and spacing, rather than replacing Reddit’s editor or comment tree. Confirm native posting, editing, voting, and menus still work, then navigate back to a feed.
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.3.4
+### Updating Chrome to 0.3.5
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.4** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.5** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
+
+Version 0.3.5 keeps the header and Home/Popular/News links visible during native post/account interactions, attaches before Reddit finishes loading, and shows navigation progress instead of leaving old cards on screen. Test feed switching, native menus, post navigation and browser Back/Forward. The URL remains on reddit.com: Pureddit is an extension running on that site.
+
+If a non-Home feed has no readable cards after six seconds, Pureddit exposes Reddit’s live feed/loading/retry interface beneath its header. The reading layer returns automatically when native posts arrive. Show Reddit removes the shell; Reading view restores it without replacing native editors.

@@ -16,15 +16,17 @@ async function start() {
   let host: HTMLDivElement | undefined;
   let toggle: HTMLDivElement | undefined;
   let ui: ReturnType<typeof mountReader> | undefined;
-  let suppressed = false; let lastVisit = ''; let lastUrl = ''; let timer = 0;
+  let loadingFallback = false; let emptySince = 0; let emptyTimer = 0;
+  let departing = false; let suppressed = false; let lastVisit = ''; let lastUrl = ''; let timer = 0;
   let overflow: string | undefined;
   let homeMode: HomeMode = 'following'; let homeFeed: HomeFeed | undefined;
   const homeController = new HomeFeedController();
-  const nativeSkin = nativeAppearance(); let rendered = ''; let skinKey = '';
+  let nativeActive = false;
+  const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void save({...preferences,colorScheme:value}); }, pin: () => {}, unpin: () => {}, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
   function skin(enabled: boolean) {
     const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}` : '';
-    if (key === skinKey) return; skinKey = key;
-    if (enabled) nativeSkin.update(preferences, next => { void save(next); }); else nativeSkin.clear();
+    if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
+    if (enabled) nativeSkin.update(preferences); else nativeSkin.clear();
   }
   const nativeStyles = new Map<ShadowRoot, HTMLStyleElement>();
   const observed = new WeakSet<ShadowRoot>();
@@ -53,10 +55,11 @@ async function start() {
     preferences = normalizePreferences(next); refresh();
     try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
   }
-  function showOriginal() { suppressed = true; restore(); skin(true); if (host) { host.hidden = true; host.style.display = 'none'; } if (toggle) toggle.hidden = false; }
+  function showOriginal() { loadingFallback = false; suppressed = true; restore(); skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
     const control = nativeControl(action);
-    showOriginal();
+    nativeActive = true; showOriginal();
+    if (!pageFromUrl(location.href)) suppressed = false;
     if (control) { control.focus(); control.click(); return; }
     if (action === 'create') {
       const page = pageFromUrl(location.href);
@@ -68,6 +71,15 @@ async function start() {
       if (button) button.textContent = 'Use Reddit’s menu above · Return to pureddit';
     }
   }
+  function navigate(url: string) {
+    if (url === location.href) { suppressed = false; refresh(); return; }
+    if (url === HOME_URL) { homeMode = 'following'; homeController.reset(); }
+    const next = pageFromUrl(url);
+    if (next && ui) { ui.update({posts:[],filtered:0,excluded:[],layout:'unsupported',page:next,preferences,preview:false,homeFeed:next.kind==='home'?{mode:homeMode,status:'switching',message:'Opening Reddit Home…'}:undefined}); ui.message(`Opening ${next.title} on Reddit…`); }
+    departing = true;
+    window.setTimeout(() => { if (departing) { departing = false; refresh(); ui?.message('Reddit is taking longer to open this page. You can retry the feed tab or use Show Reddit.'); } }, 10000);
+    location.assign(url);
+  }
   function create() {
     host = document.createElement('div'); host.id = 'pureddit-extension-root';
     host.style.cssText = 'position:fixed;inset:0;z-index:2147483646;width:100%;height:100dvh;display:block;';
@@ -76,7 +88,7 @@ async function start() {
     const root = host.attachShadow({ mode: 'open' });
     ui = mountReader(root, __PUREDDIT_THEME__, {
       original: () => { showOriginal(); visibility(); },
-      navigate: url => { if (url === HOME_URL) { homeMode = 'following'; homeController.reset(); } location.href = url; },
+      navigate,
       native,
       homeMode: value => { homeMode = value; homeController.reset(); refresh(); },
       more: () => {
@@ -95,6 +107,10 @@ async function start() {
       unpin: name => { void save({ ...preferences, pins: preferences.pins.filter(item => item !== name) }); },
     });
     document.body.append(host);
+    ensureToggle();
+  }
+  function ensureToggle() {
+    if (toggle?.isConnected) return;
     toggle = document.createElement('div'); toggle.id = 'pureddit-return-toggle';
     toggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;';
     const shadow = toggle.attachShadow({ mode: 'open' }); const button = document.createElement('button');
@@ -102,14 +118,18 @@ async function start() {
     button.addEventListener('click', () => { suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
   }
   function refresh() {
+    if (departing) return;
+    if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); }
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? nativeRoots() : [];
-    skin(preferences.enabled && (Boolean(page) && suppressed || nativePage(location.href)));
+    skin(preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page), roots);
     if (!preferences.enabled || !page) {
-      restore(); host?.remove(); toggle?.remove(); host = undefined; toggle = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); rendered = ''; return;
+      restore(); host?.remove();
+      if (!preferences.enabled || !nativePage(location.href) || !suppressed) { toggle?.remove(); toggle = undefined; } else { ensureToggle(); toggle!.hidden = false; }
+      host = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); rendered = ''; clearTimeout(emptyTimer); emptyTimer = 0; emptySince = 0; return;
     }
     if (page.community && page.community.toLowerCase() !== 'popular' && lastVisit !== page.community.toLowerCase()) {
       lastVisit = page.community.toLowerCase(); const next = visit(preferences, page.community);
@@ -117,6 +137,7 @@ async function start() {
     }
     if (host && !host.isConnected) { restore(); toggle?.remove(); host = undefined; ui = undefined; }
     if (!host) { create(); rendered = ''; }
+    if (suppressed && loadingFallback && roots.some(root => extractPosts(root, location.href).posts.length > 0)) { loadingFallback = false; suppressed = false; nativeActive = false; emptySince = 0; skin(false); }
     if (suppressed) { if (host) { host.hidden = true; host.style.display = 'none'; } if (toggle) toggle.hidden = false; return; }
     host!.hidden = false; host!.style.display = 'block'; toggle!.hidden = true;
     homeFeed = page.kind === 'home' ? homeController.select(homeMode, restore, roots) : undefined;
@@ -139,6 +160,14 @@ async function start() {
     for (const post of extracted.posts) postCache.set(post.href, post);
     while (postCache.size > 500) postCache.delete(postCache.keys().next().value!);
     extracted.posts = [...postCache.values()];
+    // A fixed reading layer must not strand native lazy loading or retry controls.
+    // Reveal the live feed, retaining our header, if Reddit has supplied no cards.
+    if (!extracted.posts.length && page.kind !== 'home') {
+      emptySince ||= Date.now();
+      if (!emptyTimer) emptyTimer = window.setTimeout(() => { emptyTimer = 0; refresh(); }, 6000);
+      if (Date.now() - emptySince >= 6000) { nativeActive = true; showOriginal(); loadingFallback = true; nativeSkin.status('Reddit has not supplied readable posts yet. Its live feed and retry controls are available below.'); return; }
+    } else { emptySince = 0; clearTimeout(emptyTimer); emptyTimer = 0; }
+
     const signature = JSON.stringify([extracted, page, preferences, homeFeed]);
     if (signature !== rendered) { rendered = signature; ui!.update({ ...extracted, page, preferences, preview: false, homeFeed }); }
     if (storageError) ui!.message('Browser preferences could not be saved. The reading view still works in this tab.');
@@ -146,7 +175,8 @@ async function start() {
   const schedule = () => { if (!timer) timer = window.setTimeout(() => { timer = 0; refresh(); }, 120); };
   const observer = new MutationObserver(schedule);
   const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
-  observer.observe(document.body, observation);
+  observer.observe(document.documentElement, observation);
+  window.addEventListener('pageshow', () => { departing = false; suppressed = false; refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   const poll = window.setInterval(() => {
@@ -165,8 +195,11 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); clearTimeout(emptyTimer); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();
-else document.addEventListener('DOMContentLoaded', () => { if (document.body) void start(); }, { once: true });
+else {
+  const bootstrap = new MutationObserver(() => { if (document.body) { bootstrap.disconnect(); void start(); } });
+  bootstrap.observe(document.documentElement || document, {childList:true,subtree:true});
+}

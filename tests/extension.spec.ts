@@ -154,6 +154,7 @@ test('top-bar controls activate original Reddit controls and keep native menus u
   for(const [name,action] of [['Account','account'],['Notifications','notifications'],['Create post','create']]) {
     await reader.getByRole('button',{name,exact:true}).click();
     expect(await page.evaluate(()=>document.body.dataset.nativeAction)).toBe(action);
+    await expect(page.locator('#pureddit-native-controls').getByRole('link',{name:'pureddit home',exact:true})).toBeVisible();
     expect(await page.locator('#native').evaluate(element=>(element as HTMLElement).inert)).toBe(false);
     await expect(reader).toBeHidden();await page.getByRole('button',{name:'pureddit · Reading view'}).click();
   }
@@ -292,4 +293,73 @@ test('Home recognizes Reddit faceplate selection markers without ARIA selection'
   await expect(reader.getByText('A followed community post',{exact:true})).toBeVisible();
   await reader.getByRole('tab',{name:'For You',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(3);
   await reader.getByRole('tab',{name:'Following',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
+});
+
+test('feed tabs survive full Reddit navigations and browser Back with the correct feed selected', async({context,page})=>{
+  await harness(context,homeFixture);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  page.on('domcontentloaded',()=>{void inject(page).catch(()=>{});});
+  const reader=page.locator('#pureddit-extension-root');
+  for (const [name,url] of [['Home','https://www.reddit.com/'],['Popular','https://www.reddit.com/r/popular/'],['News','https://www.reddit.com/r/news/']]) {
+    await reader.locator('.primary').getByRole('link',{name,exact:true}).click();await expect(page).toHaveURL(url);
+    await expect(reader.getByRole('article')).toHaveCount(1);
+    await expect(reader.locator('.primary a.active')).toHaveText(name);
+  }
+  await page.goBack();await expect(page).toHaveURL('https://www.reddit.com/r/popular/');
+  await expect(reader.getByRole('article')).toHaveCount(1);await expect(reader.locator('.primary a.active')).toHaveText('Popular');
+});
+
+test('post navigation retains the Pureddit header and native editors without reparenting them', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  page.on('domcontentloaded',()=>{void inject(page).catch(()=>{});});
+  await page.locator('#pureddit-extension-root').getByRole('link',{name:'A post already loaded on Reddit',exact:true}).click();
+  await expect(page).toHaveURL('https://www.reddit.com/r/news/comments/abc123/discussion/');
+  const shell=page.locator('#pureddit-native-controls');
+  await expect(shell.getByRole('link',{name:'pureddit home',exact:true})).toBeVisible();
+  await expect(shell.getByRole('button',{name:'Account',exact:true})).toBeVisible();
+  await expect(shell.locator('.native-feeds').getByRole('link',{name:'Popular',exact:true})).toBeVisible();
+  await page.evaluate(()=>{const editor=document.createElement('textarea');editor.setAttribute('aria-label','Native comment editor');document.querySelector('#native')!.append(editor);});
+  await page.getByLabel('Native comment editor').fill('A comment kept in Reddit’s own editor');
+  await shell.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await expect(page.getByLabel('Native comment editor')).toHaveValue('A comment kept in Reddit’s own editor');
+  expect(await page.getByLabel('Native comment editor').evaluate(node=>node.parentElement?.id)).toBe('native');
+  await shell.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();await expect(shell).toHaveCount(0);
+  await page.getByRole('button',{name:'pureddit · Reading view',exact:true}).click();
+  await expect(shell.getByRole('link',{name:'pureddit home',exact:true})).toBeVisible();
+  await expect(page.getByLabel('Native comment editor')).toHaveValue('A comment kept in Reddit’s own editor');
+  await shell.locator('.native-feeds').getByRole('link',{name:'Popular',exact:true}).click();await expect(page).toHaveURL('https://www.reddit.com/r/popular/');
+  await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);
+});
+
+test('slow feed navigation clears old cards and keeps destination feedback during native mutations', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  let release!:()=>void; const wait=new Promise<void>(resolve=>{release=resolve;});
+  await context.route('https://www.reddit.com/r/popular/',async route=>{await wait;await route.fulfill({contentType:'text/html',body:fixture});});
+  try {
+    // Locator assertions wait for pending navigation to commit. Inspect the old
+    // document directly while the response is deliberately held instead.
+    const snapshot=await page.evaluate(async()=>{
+      const root=document.querySelector('#pureddit-extension-root')!.shadowRoot!;
+      [...root.querySelectorAll<HTMLAnchorElement>('.primary a')].find(link=>link.textContent==='Popular')!.click();
+      document.querySelector('#native')!.append(document.createElement('div'));
+      await new Promise(resolve=>setTimeout(resolve,250));
+      return {status:root.querySelector('.notice')?.textContent,posts:root.querySelectorAll('article').length,active:root.querySelector('.primary a.active')?.textContent};
+    });
+    expect(snapshot).toEqual({status:'Opening Popular on Reddit…',posts:0,active:'Popular'});
+  } finally {release();}
+  await page.waitForURL('https://www.reddit.com/r/popular/');
+});
+
+test('a stalled native feed exposes its real retry controls beneath Pureddit and recovers when cards arrive', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/popular/');
+  await page.locator('shreddit-post').evaluateAll(nodes=>nodes.forEach(node=>node.remove()));
+  await page.clock.install();await inject(page);await expect(page.locator('#pureddit-extension-root')).toBeVisible();
+  await page.clock.fastForward(6500);
+  await expect(page.locator('#pureddit-extension-root')).toBeHidden();
+  const shell=page.locator('#pureddit-native-controls');await expect(shell.getByRole('link',{name:'pureddit home',exact:true})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Native Reddit control',exact:true})).toBeVisible();
+  await expect(shell.getByRole('status')).toContainText('live feed and retry controls');
+  await page.evaluate(()=>{const post=document.createElement('shreddit-post');post.setAttribute('post-title','Native loading recovered');post.setAttribute('subreddit-name','news');post.setAttribute('permalink','/r/news/comments/recover1/title/');document.querySelector('#native')!.append(post);});
+  await page.clock.runFor(200);
+  await expect(page.locator('#pureddit-extension-root').getByRole('link',{name:'Native loading recovered',exact:true})).toBeVisible();
+  await expect(shell).toHaveCount(0);
 });
