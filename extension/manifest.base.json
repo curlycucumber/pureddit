@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "pureddit",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "description": "A compact reading view for Reddit pages you open. No backend, API tokens, or account connection.",
   "permissions": ["storage"],
   "host_permissions": ["https://www.reddit.com/*", "https://old.reddit.com/*", "https://new.reddit.com/*", "https://reddit.com/*"],

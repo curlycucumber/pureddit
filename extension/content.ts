@@ -1,3 +1,4 @@
+import { DisplayModeController, renderedDisplayMode } from './display-mode';
 import { NativeTabs } from './native-tabs';
 import { RootRegistry } from './roots';
 import { extractPosts } from '../shared/extract';
@@ -10,11 +11,13 @@ import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
 declare const __PUREDDIT_THEME__: string;
 
 // Read feeds and style Reddit's native interactive pages. No fetch/XHR, credentials, API calls,
-// history interception, or writes to Reddit are used by this extension.
+// history interception or private account endpoints. Display choices use Reddit’s native UI.
 async function start() {
   if (window.top !== window || location.protocol !== 'https:' || !['www.reddit.com', 'reddit.com', 'old.reddit.com', 'new.reddit.com'].includes(location.hostname)) return;
   let preferences: Preferences; let storageError = false;
   try { preferences = await loadPreferences(); } catch { preferences = normalizePreferences(DEFAULTS); storageError = true; }
+  const initialMode=renderedDisplayMode();if(initialMode)preferences={...preferences,colorScheme:initialMode};
+  const displayMode = new DisplayModeController();let colorRequest=0;
   let host: HTMLDivElement | undefined;
   let toggle: HTMLDivElement | undefined;
   let ui: ReturnType<typeof mountReader> | undefined;
@@ -34,7 +37,7 @@ async function start() {
   const nativeTabs = new NativeTabs();
   const homeController = new HomeFeedController();
   let nativeActive = false;
-  const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void save({...preferences,colorScheme:value}); }, pin: () => {}, unpin: () => {}, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
+  const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void changeColorScheme(value); }, pin: () => {}, unpin: () => {}, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
   function skin(enabled: boolean) {
     const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}:${Boolean(document.querySelector('shreddit-app'))}` : '';
     if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
@@ -68,6 +71,21 @@ async function start() {
   async function save(next: Preferences) {
     preferences = normalizePreferences(next); refresh();
     try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
+  }
+  async function changeColorScheme(value: Preferences['colorScheme']) {
+    const request=++colorRequest;
+    await save({...preferences,colorScheme:value});
+    if(request!==colorRequest||!preferences.enabled)return;
+    const result=await displayMode.set(value,()=>discovery().snapshot(),restore);
+    if(result==='canceled'||request!==colorRequest||!preferences.enabled)return;
+    const label=value==='light'?'Light':'Dark';
+    if(result==='selected') { if(nativeSkin.connected())nativeSkin.status(`Reddit display mode: ${label}.`); else ui?.message(`Reddit display mode: ${label}.`); }
+    else {
+      const actual=renderedDisplayMode();if(actual&&actual!==preferences.colorScheme)await save({...preferences,colorScheme:actual});
+      const message=`Reddit did not confirm ${label} display mode. Open Reddit display settings and select ${label}.`;
+      if(nativeSkin.connected())nativeSkin.status(message,'https://www.reddit.com/settings/preferences');else { ui?.message(message);const notice=host?.shadowRoot?.querySelector('.notice');if(notice){const link=document.createElement('a');link.href='https://www.reddit.com/settings/preferences';link.target='_blank';link.rel='noopener noreferrer';link.textContent=' Open Reddit display settings (new tab)';link.style.textDecoration='underline';notice.append(link);} }
+    }
+    refresh();
   }
   function showOriginal(keepNavigation = false) { if (!keepNavigation) cancelNavigation(); loadingFallback = false; suppressed = true; restore(); if (!nativeActive) { nativeTabs.clear(); clearNativeFilters(); } skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
@@ -135,7 +153,7 @@ async function start() {
         ui?.message('Asked Reddit to load more posts. New posts will appear here when Reddit adds them. Use Show Reddit if its native loader requires interaction.');
       },
       appearance: value => { void save({ ...preferences, appearance: value }); },
-      colorScheme: value => { void save({ ...preferences, colorScheme: value }); },
+      colorScheme: value => { void changeColorScheme(value); },
       pin: name => { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) void save({ ...preferences, pins: [...preferences.pins, name] }); },
       unpin: name => { void save({ ...preferences, pins: preferences.pins.filter(item => item !== name) }); },
     });
@@ -152,7 +170,7 @@ async function start() {
   }
   function refresh() {
     if (!preferences.enabled) {
-      cancelNavigation(); observer.disconnect();
+      colorRequest++;displayMode.cancel(); cancelNavigation(); observer.disconnect();
       if (observing || registry) { registry = undefined; rootsDirty = true; cachedRoots = []; parsedPosts = new WeakMap(); lastCards.clear(); routeCards.clear(); homeController.reset(); }
       observing = false; observed.clear();
     }
@@ -258,6 +276,9 @@ async function start() {
     const added = new Set<Element>();
     for (const record of records) {
       if (nativeTabs.ownMutation(record)) continue;
+      if(record.type==='attributes'&&record.attributeName==='class'&&!displayMode.busy&&[document.documentElement,document.body,document.querySelector('shreddit-app')].includes(record.target as HTMLElement)){
+        const actual=renderedDisplayMode();if(actual&&actual!==preferences.colorScheme){preferences={...preferences,colorScheme:actual};void savePreferences(preferences).catch(()=>{storageError=true;});nativeSkin.status('');relevant=true;}
+      }
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
       if (target?.closest('#pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) continue;
       let touchedCard = false;
@@ -309,11 +330,11 @@ async function start() {
   extensionApi()?.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[KEY]) {
       const next = normalizePreferences(changes[KEY].newValue);
-      if (!preferences.enabled && next.enabled) { suppressed = false; registry = undefined; rootsDirty = true; cachedRoots = []; parsedPosts = new WeakMap(); }
+      if (!preferences.enabled && next.enabled) { const actual=renderedDisplayMode();if(actual)next.colorScheme=actual; suppressed = false; registry = undefined; rootsDirty = true; cachedRoots = []; parsedPosts = new WeakMap(); }
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); cancelNavigation(); nativeTabs.clear(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); displayMode.cancel(); cancelNavigation(); nativeTabs.clear(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();

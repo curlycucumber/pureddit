@@ -93,9 +93,9 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.3.11
+### Updating Chrome to 0.3.12
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.11** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.12** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
 
@@ -116,3 +116,5 @@ Test autoplay with your Reddit profile setting both enabled and disabled, media 
 Version 0.3.10 reduces native Modern metadata-update scanning, deduplicates nested root discovery, and disconnects/relinquishes caches while disabled. Re-enabling rebuilds fresh state. Native media and autoplay decisions remain with Reddit.
 
 Version 0.3.11 consolidates current-site navigation: one compact Pureddit appearance bar above Reddit’s native header/sidebar. Native Following/For You buttons are renamed Your Feed/Suggested Feed while their handlers remain intact. Pureddit locally overrides light/dark colors in the document and open native shadow components, without changing Reddit profile preferences. Old discussions use compact classic typography, squared controls and smaller previews. News now targets `https://www.reddit.com/news`; `/r/news` remains a community. Check local Light mode while your Reddit profile uses Dark, switching native tabs, native Home after Suggested Feed, News routing, reply drafts across layout changes, and disabling to restore original labels/styles.
+
+Version 0.3.12 makes installed-extension Light/Dark clicks invoke Reddit’s own Display mode controls, including the native `li[data-testid^="theme-option-"] [role="option"]` choices. Reddit handles saving through the signed-in website; no account API tokens or extra permissions are introduced. Native selected state is checked before confirmation. Test Light and Dark, open the native menu to inspect its checkmark, and reload to verify your real account persisted the choice. Account server persistence cannot be certified by the controlled browser fixtures. If selection cannot be confirmed, the theme bar explains that and links to Reddit settings; it follows the current native theme when available. The preview cannot change a Reddit account.

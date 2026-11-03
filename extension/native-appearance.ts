@@ -103,11 +103,13 @@ ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px'
     if (page.kind === 'home' && home?.status !== 'ready') {const message=document.createElement('p');message.setAttribute('role','status');message.textContent=home?.message||'Waiting for Reddit’s feed.';const button=document.createElement('button');button.textContent='Open Reddit’s feed controls';button.onclick=actions.original;section.append(message,button);}
     offset();
   }
-  function status(text: string) {
+  function status(text: string, settingsUrl?:string) {
     const root=panel?.shadowRoot; if (!root) return;
     let message=root.querySelector<HTMLElement>('.native-status');
     if (!message) { message=document.createElement('p'); message.className='native-status'; message.setAttribute('role','status'); message.style.cssText='padding:8px 20px;font-size:12px'; root.querySelector('.reader')!.append(message); }
-    message.textContent=text; offset();
+    message.textContent=text;message.hidden=!text;
+    if(settingsUrl){const link=document.createElement('a');link.href=settingsUrl;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Open Reddit display settings (new tab)';link.style.cssText='color:inherit;text-decoration:underline;margin-left:8px';message.append(link);}
+    offset();
   }
   function applyRoots(roots: Array<Document|ShadowRoot>) {
     if(sharedSheet && sharedCss!==shadowCss){sharedSheet.replaceSync(shadowCss);sharedCss=shadowCss;}
