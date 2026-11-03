@@ -48,7 +48,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       <main id="feed" tabindex="-1">
         <div class="heading"><div><p class="source-label"></p><h1></h1></div><span class="post-count"></span></div>
         <p class="description"></p>
-        <div class="home-tabs" role="tablist" aria-label="Home feed" hidden><button type="button" role="tab" data-home-mode="following" aria-selected="true">Following</button><button type="button" role="tab" data-home-mode="for-you" aria-selected="false">For You</button></div>
+        <div class="home-tabs" role="tablist" aria-label="Home feed" hidden><button type="button" role="tab" data-home-mode="following" aria-selected="true">Your Feed</button><button type="button" role="tab" data-home-mode="for-you" aria-selected="false">Suggested Feed</button></div>
         <div class="home-feed-status" hidden><p role="status"></p><button type="button">Open Reddit’s feed controls</button></div>
         <div class="toolbar">
           <nav class="sorts" aria-label="Sort posts"></nav>
@@ -126,7 +126,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       }
       find('h1').textContent = page.title;
       find('.source-label').textContent = model.preview ? 'EXTENSION DESIGN PREVIEW' : 'YOUR REDDIT PAGE';
-      find('.description').textContent = page.kind === 'home' ? model.homeFeed?.status === 'ready' ? model.homeFeed.mode === 'following' ? 'Following: posts from the communities you follow on Reddit.' : 'For You: Reddit’s Home feed, including suggestions. Ads are hidden.' : 'Waiting for Reddit to confirm the selected Home feed.' : `Posts from ${page.community ? `r/${page.community}` : 'Reddit'}.`;
+      find('.description').textContent = page.kind === 'home' ? model.homeFeed?.status === 'ready' ? model.homeFeed.mode === 'following' ? 'Your Feed: posts from the communities you follow on Reddit.' : 'Suggested Feed: Reddit’s For You feed, including communities you may not follow. Ads are hidden.' : 'Waiting for Reddit to confirm the selected Home feed.' : `Posts from ${page.community ? `r/${page.community}` : 'Reddit'}.`;
       find<HTMLElement>('.home-tabs').hidden = page.kind !== 'home';
       find<HTMLButtonElement>('.load-more').disabled = Boolean(model.homeFeed && model.homeFeed.status !== 'ready');
       find<HTMLElement>('.home-feed-status').hidden = page.kind !== 'home' || model.homeFeed?.status === 'ready';

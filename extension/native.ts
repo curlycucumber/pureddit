@@ -47,7 +47,11 @@ export class HomeFeedController {
   private started = 0;
   private pendingKey = '';
   private previousCards: Map<Element, string> | undefined;
-  reset() { this.attempted = ''; }
+  private priorFeed = new Map<Element,string>();
+  reset() { this.attempted = ''; this.pendingKey = ''; this.previousCards = undefined; this.priorFeed.clear(); }
+  staleCards(roots: Array<Document | ShadowRoot>) {
+    return [...this.cards(roots)].filter(([node,value]) => this.priorFeed.get(node) === value).map(([node]) => node);
+  }
   private cards(roots: Array<Document | ShadowRoot>) {
     const cards = new Map<Element, string>();
     for (const root of roots) for (const post of root.querySelectorAll('shreddit-post, .thing.link')) {
@@ -63,7 +67,7 @@ export class HomeFeedController {
   }
   select(mode: HomeMode, beforeClick: () => void, roots = nativeRoots()): HomeFeed {
     const key = `${location.href}:${mode}`;
-    if (this.pendingKey !== key) { this.previousCards = undefined; this.pendingKey = key; }
+    if (this.pendingKey !== key) { this.priorFeed.clear(); this.previousCards = undefined; this.pendingKey = key; }
     const control = feedControl(mode, roots);
     const isSelected = () => {
       let candidate: Element | null = control || null;
@@ -84,6 +88,7 @@ export class HomeFeedController {
       // Native tabs can change selection before fetching/replacing their posts.
       // Keep the prior feed out of the reader/cache until its cards change too.
       this.previousCards ??= this.cards(roots);
+      this.priorFeed = new Map(this.previousCards);
       beforeClick(); control.click();
       if (isSelected() && (this.previousCards.size === 0 || this.contentChanged(roots))) { this.previousCards = undefined; return { mode, status: 'ready' }; }
     }

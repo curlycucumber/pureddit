@@ -94,8 +94,8 @@ test('preview exposes Following and For You with keyboard navigation and honest 
   await page.goto('/');const reader=page.locator('#reader-host');
   await reader.getByRole('link',{name:'Home',exact:true}).click();
   await expect(reader.getByRole('article')).toHaveCount(3);
-  await reader.getByRole('tab',{name:'Following',exact:true}).focus();await page.keyboard.press('ArrowRight');
-  await expect(reader.getByRole('tab',{name:'For You',exact:true})).toHaveAttribute('aria-selected','true');
+  await reader.getByRole('tab',{name:'Your Feed',exact:true}).focus();await page.keyboard.press('ArrowRight');
+  await expect(reader.getByRole('tab',{name:'Suggested Feed',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(reader.getByRole('article')).toHaveCount(7);
   await reader.getByRole('button',{name:'Notifications',exact:true}).click();await expect(page.locator('.preview-message')).toContainText('does not connect to a Reddit account');
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
@@ -141,4 +141,10 @@ test('sample links are clearly simulated and all development packages can be dow
     const link = page.getByRole('link',{name: browser==='safari'?'Safari source ↓':`${browser==='chrome'?'Chrome':'Firefox'} package ↓`});
     await expect(link).toHaveAttribute('href',`/downloads/pureddit-${browser}.zip`);
   }
+});
+
+test('preview reload defaults Home to Your Feed even after explicitly choosing Suggested Feed', async({page})=>{
+  await page.goto('/');const reader=page.locator('#reader-host');await reader.getByRole('link',{name:'Home',exact:true}).click();
+  await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(7);
+  await page.reload();await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');await expect(reader.getByRole('article')).toHaveCount(3);
 });

@@ -76,8 +76,8 @@ async function start() {
     }
   }
   function navigate(url: string) {
+    if (pageFromUrl(url)?.kind === 'home' && homeMode !== 'following') { homeMode = 'following'; homeController.reset(); }
     if (url === location.href) { suppressed = false; refresh(); return; }
-    if (url === HOME_URL) { homeMode = 'following'; homeController.reset(); }
     const next = pageFromUrl(url);
     if (next && ui) { ui.update({posts:[],filtered:0,excluded:[],layout:'unsupported',page:next,preferences,preview:false,homeFeed:next.kind==='home'?{mode:homeMode,status:'switching',message:'Opening Reddit Home…'}:undefined}); ui.message(`Opening ${next.title} on Reddit…`); }
     let link = nativeLink(url, rootsNow());
@@ -112,7 +112,7 @@ async function start() {
       original: () => { showOriginal(); visibility(); },
       navigate,
       native,
-      homeMode: value => { homeMode = value; homeController.reset(); refresh(); },
+      homeMode: value => { if (homeMode !== value) { homeMode = value; homeController.reset(); } refresh(); },
       more: () => {
         const next = [...document.querySelectorAll<HTMLAnchorElement>('.next-button a')].find(link => { try { const url = new URL(link.href); return url.hostname === location.hostname && Boolean(pageFromUrl(url.href)); } catch { return false; } });
         if (next) { location.href = next.href; return; }
@@ -141,7 +141,7 @@ async function start() {
   }
   function refresh() {
     if (departing || pendingUrl && location.href.replace(/\/$/, '') !== pendingUrl.replace(/\/$/, '')) return;
-    if (location.href !== lastUrl) { const lastUrlBeforeChange = lastUrl; lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); rootsDirty = true; routeCards = pageFromUrl(lastUrlBeforeChange) && pageFromUrl(location.href) ? (pendingUrl ? routeCards : lastCards) : new Map(); postCache.clear(); cacheKey = ''; rendered = ''; pendingUrl = ''; }
+    if (location.href !== lastUrl) { const lastUrlBeforeChange = lastUrl; lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); if (pageFromUrl(location.href)?.kind === 'home') homeMode = 'following'; rootsDirty = true; routeCards = pageFromUrl(lastUrlBeforeChange) && pageFromUrl(location.href) ? (pendingUrl ? routeCards : lastCards) : new Map(); postCache.clear(); cacheKey = ''; rendered = ''; pendingUrl = ''; }
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? rootsNow() : [];
@@ -170,6 +170,7 @@ async function start() {
     }
     const currentCards = cardSnapshot(roots);
     const unchanged = new Set([...currentCards].filter(([node,value]) => routeCards.get(node) === value).map(([node]) => node));
+    if (page.kind === 'home' && homeMode === 'following') for (const node of homeController.staleCards(roots)) unchanged.add(node);
     lastCards = currentCards;
     const options = { excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
@@ -216,7 +217,7 @@ async function start() {
   });
   const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation);
-  window.addEventListener('pageshow', () => { pendingUrl = ''; departing = false; suppressed = false; refresh(); });
+  window.addEventListener('pageshow', event => { pendingUrl = ''; departing = false; suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   const poll = window.setInterval(() => {

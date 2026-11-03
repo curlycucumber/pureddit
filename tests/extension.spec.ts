@@ -66,15 +66,15 @@ test('Home selects native Following on the same URL, allows For You, and never s
   await harness(context,homeFixture);await page.goto('https://www.reddit.com/');await inject(page);
   const reader=page.locator('#pureddit-extension-root');
   await expect(reader.getByRole('article')).toHaveCount(1);
-  await expect(reader.getByRole('tab',{name:'Following',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(page.locator('[data-native-mode="following"]')).toHaveAttribute('aria-selected','true');
   await expect(reader.getByText('A followed community post',{exact:true})).toBeVisible();
-  await reader.getByRole('tab',{name:'For You',exact:true}).click();
+  await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();
   await expect(reader.getByRole('article')).toHaveCount(3);
   await expect(reader.getByText('A suggested post',{exact:true})).toBeVisible();
   await expect(reader.getByText('Paid placement',{exact:true})).toHaveCount(0);
   await expect(page).toHaveURL('https://www.reddit.com/');
-  await reader.getByRole('tab',{name:'Following',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
+  await reader.getByRole('tab',{name:'Your Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
   await reader.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();
   await page.locator('[data-native-mode="for-you"]').click();
   await page.getByRole('button',{name:'pureddit · Reading view'}).click();
@@ -109,6 +109,8 @@ test('Following does not cache stale For You cards when the tab changes before t
   const delayed=homeFixture.replace('()=>render(button.dataset.nativeMode)', `()=>{document.querySelectorAll('[data-native-mode]').forEach(tab=>tab.setAttribute('aria-selected',String(tab===button)));setTimeout(()=>render(button.dataset.nativeMode),900);}`);
   await harness(context,delayed);await page.goto('https://www.reddit.com/');await inject(page);
   const reader=page.locator('#pureddit-extension-root');
+  await page.evaluate(()=>window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:false})));
+  await reader.getByRole('tab',{name:'Your Feed',exact:true}).click();
   await expect(reader.locator('.home-feed-status')).toContainText('Switching Reddit');
   await expect(reader.getByRole('article')).toHaveCount(0);
   await expect(reader.getByRole('article')).toHaveCount(1);
@@ -291,8 +293,8 @@ test('Home recognizes Reddit faceplate selection markers without ARIA selection'
   const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
   await expect(page.locator('[data-native-mode="following"]')).toHaveAttribute('faceplate-tab-selected','');
   await expect(reader.getByText('A followed community post',{exact:true})).toBeVisible();
-  await reader.getByRole('tab',{name:'For You',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(3);
-  await reader.getByRole('tab',{name:'Following',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
+  await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(3);
+  await reader.getByRole('tab',{name:'Your Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
 });
 
 test('feed tabs survive full Reddit navigations and browser Back with the correct feed selected', async({context,page})=>{
@@ -406,4 +408,21 @@ test('navigation hover mutations do not repeatedly extract the feed', async({con
     const nav=document.getElementById('native-action')!;for(let i=0;i<100;i++)nav.classList.toggle('hovered');
   });
   await page.waitForTimeout(400);expect(await page.evaluate(()=>(window as any).feedScans)).toBe(0);
+});
+
+test('Your Feed defaults on startup, same-URL Home clicks and reload after choosing Suggested Feed', async({context,page})=>{
+  await harness(context,homeFixture);await page.goto('https://www.reddit.com/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');
+  await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
+  await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(3);
+  await reader.locator('.primary').getByRole('link',{name:'Home',exact:true}).click();
+  await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');await expect(reader.getByRole('article')).toHaveCount(1);
+  await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await page.reload();await inject(page);
+  await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');await expect(reader.getByText('A For You-only community',{exact:true})).toHaveCount(0);
+});
+
+test('Your Feed excludes unchanged suggested cards retained during a partial native transition', async({context,page})=>{
+  const partial=`<!doctype html><html><body><nav role="tablist"><button role="tab" aria-selected="false" id="following">Following</button><button role="tab" aria-selected="true" id="suggested">For You</button></nav><div id="cards"><shreddit-post post-title="An old unmarked suggestion" subreddit-name="othercommunity" permalink="/r/othercommunity/comments/old1/title/"></shreddit-post></div><script>document.querySelector('#following').onclick=()=>{document.querySelector('#following').setAttribute('aria-selected','true');document.querySelector('#suggested').setAttribute('aria-selected','false');const card=document.createElement('shreddit-post');card.setAttribute('post-title','From a followed community');card.setAttribute('subreddit-name','news');card.setAttribute('permalink','/r/news/comments/new1/title/');document.querySelector('#cards').append(card);};</script></body></html>`;
+  await harness(context,partial);await page.goto('https://www.reddit.com/');await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await expect(reader.getByRole('article')).toHaveCount(1);await expect(reader.getByText('From a followed community',{exact:true})).toBeVisible();await expect(reader.getByText('An old unmarked suggestion',{exact:true})).toHaveCount(0);
 });

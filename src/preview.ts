@@ -71,13 +71,15 @@ function navigate(url: string) {
 }
 function readRoute() {
   if (lastRoute === location.hash) return;
+  const initialLoad = lastRoute === undefined;
   lastRoute = location.hash;
   const previousFeedUrl = feedUrl;
   const params = new URLSearchParams(location.hash.slice(1));
   const requestedFeed = params.get('feed') || 'https://www.reddit.com/r/popular/';
   page = pageFromUrl(requestedFeed) || pageFromUrl('https://www.reddit.com/r/popular/')!;
   feedUrl = pageFromUrl(requestedFeed) ? requestedFeed : 'https://www.reddit.com/r/popular/';
-  homeMode = params.get('mode') === 'for-you' ? 'for-you' : 'following';
+  homeMode = !initialLoad && params.get('mode') === 'for-you' ? 'for-you' : 'following';
+  if (initialLoad && page.kind === 'home' && params.get('mode') === 'for-you') { params.set('mode','following'); history.replaceState(history.state,'',`${location.pathname}${location.search}#${params}`); lastRoute = location.hash; }
   const nextPost = catalog.find(post => post.id === params.get('post'));
   const composing = params.get('compose') === '1';
   const main = shadow.querySelector<HTMLElement>('main')!, layout = shadow.querySelector<HTMLElement>('.layout')!;
