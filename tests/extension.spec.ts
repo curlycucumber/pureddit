@@ -527,3 +527,30 @@ test('cached metadata updates when a native link target or text node changes', a
   await expect(reader.getByRole('link',{name:'Text-only metadata update',exact:true})).toHaveAttribute('href','https://www.reddit.com/r/news/comments/second1/title/');
   await expect(reader.getByRole('link',{name:'Updated native title',exact:true})).toHaveCount(0);
 });
+
+test('native Modern score and text updates do not rescan the feed, while ad changes still filter', async({context,page})=>{
+  await harness(context);const native=fixture.replace('<div id="native">','<shreddit-app><div id="native">').replace('</body>','</shreddit-app></body>');await context.route('https://www.reddit.com/r/news/',route=>route.fulfill({contentType:'text/html',body:native}));await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{document.querySelector('shreddit-post')!.innerHTML='<h2>Native title</h2>';});await inject(page);await expect(page.locator('#pureddit-native-controls')).toBeVisible();await page.waitForTimeout(150);
+  const scans=await page.evaluate(async()=>{let scans=0;const query=document.querySelectorAll.bind(document);document.querySelectorAll=((s:string)=>{if(s==='shreddit-post, .thing.link')scans++;return query(s);}) as typeof query;
+    const post=document.querySelector('shreddit-post')!;for(let i=0;i<4;i++){post.setAttribute('score',String(100+i));post.querySelector('h2')!.firstChild!.textContent=`Title ${i}`;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);}return scans;});
+  expect(scans).toBe(0);await page.locator('#native shreddit-post').first().evaluate(node=>{(node as HTMLElement).hidden=true;});await expect(page.locator('#native shreddit-post').first()).toBeHidden();await page.locator('#native shreddit-post').first().evaluate(node=>{(node as HTMLElement).hidden=false;node.setAttribute('promoted','true');});await expect(page.locator('#native shreddit-post').first()).toBeHidden();
+});
+
+test('nested native insertions discover the added subtree once per mutation batch', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);await page.waitForTimeout(150);
+  await page.evaluate(()=>{(window as any).subtreeScans=0;const query=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(s:string){if(s==='*')(window as any).subtreeScans++;return query.call(this,s);} as typeof query;let parent=document.getElementById('native')!;for(let i=0;i<100;i++){const child=document.createElement('div');parent.append(child);parent=child;}});
+  await page.waitForTimeout(250);expect(await page.evaluate(()=>(window as any).subtreeScans)).toBeLessThanOrEqual(2);
+});
+
+test('disabled extension skips root discovery and restarts with fresh metadata when enabled', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await page.evaluate(()=>{localStorage.setItem('pureddit.preferences.v1',JSON.stringify({enabled:false}));(window as any).disabledScans=0;const query=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(s:string){if(s==='*')(window as any).disabledScans++;return query.call(this,s);} as typeof query;});
+  await inject(page);await page.evaluate(()=>{document.querySelector('shreddit-post')!.setAttribute('post-title','Changed while disabled');document.querySelector('#native')!.append(document.createElement('section'));});await page.waitForTimeout(200);
+  expect(await page.evaluate(()=>(window as any).disabledScans)).toBe(0);
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').check();await expect(page.locator('#pureddit-extension-root').getByRole('link',{name:'Changed while disabled',exact:true})).toBeVisible();
+});
+
+test('new shadow hosts are checked on the next frame without waiting for the periodic probe', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await page.clock.install();await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);await page.clock.runFor(300);
+  await page.evaluate(()=>{const host=document.createElement('section');document.getElementById('native')!.append(host);queueMicrotask(()=>{host.attachShadow({mode:'open'}).innerHTML='<shreddit-post post-title="Ready on the next frame" subreddit-name="news" permalink="/r/news/comments/fastroot1/title/"></shreddit-post>';});});
+  await page.clock.runFor(100);await expect(reader.getByRole('link',{name:'Ready on the next frame',exact:true})).toBeVisible();
+});

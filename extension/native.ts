@@ -101,7 +101,7 @@ export class HomeFeedController {
   }
 }
 
-export function nativeControl(action: NativeAction): HTMLElement | undefined {
+export function nativeControl(action: NativeAction, roots = nativeRoots()): HTMLElement | undefined {
   const selectors: Record<NativeAction, string> = {
     create: 'a[href="/submit"], a[href$="/submit/"], button[aria-label*="create post" i]',
     notifications: '#notifications-button, a[href="/notifications"], a[href="/notifications/"], button[aria-label*="notification" i]',
@@ -114,7 +114,7 @@ export function nativeControl(action: NativeAction): HTMLElement | undefined {
     account: /^(open )?(user|account|profile) menu$/i,
     navigation: /^(open )?navigation( menu)?$/i,
   };
-  for (const root of nativeRoots()) {
+  for (const root of roots) {
     const explicit = [...root.querySelectorAll<HTMLElement>(selectors[action])].find(visible);
     if (explicit) return explicit;
     const named = [...root.querySelectorAll<HTMLElement>('button, a, [role="button"]')].find(element => visible(element) && names[action].test(label(element)));

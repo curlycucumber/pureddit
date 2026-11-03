@@ -64,3 +64,18 @@ Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for a custom Chromium installation. To comp
   }
 }
 ```
+
+
+## 0.3.10 follow-up
+
+Controlled native-page regression measurements against 0.3.9:
+
+| Workload | Before | After |
+|---|---:|---:|
+| Feed selector scans during four native score/text updates | 4 | 0 |
+| Subtree selector walks for 100 nested insertions in one mutation batch | 100 | ≤2 |
+| Root-discovery selector walks during disabled startup plus a DOM addition | 2 | 0 |
+
+These counts measure avoided work, not a new claim about end-to-end Reddit speed. Modern lets Reddit render its own score/text changes without rescanning the feed. Ad/recommendation markers, hidden state, tab selection, and structural changes still trigger extension updates. Added subtrees are deduplicated against their added ancestors before root discovery. Routine snapshots avoid probing every known shadow host; periodic discovery still detects late shadow attachment. Newly added hosts are probed on the next update, so they do not wait for the periodic pass. Account actions reuse the registry rather than walking the entire document again.
+
+Disabling disconnects mutation observation and releases root/metadata references; enabling starts with fresh discovery and metadata. A regression checks that an updated title appears after re-enable. Native display behavior is preserved so hidden posts remain hidden. Playback and autoplay controls are unchanged.

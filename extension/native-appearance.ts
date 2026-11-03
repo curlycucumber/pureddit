@@ -27,7 +27,7 @@ ${scope} shreddit-comment {--color-action-upvote:#d94b16;--color-action-downvote
 ${scope}[data-pureddit-native=old] shreddit-comment {font-size:12px;--rem14:12px;--rem16:13px;}
 ${scope} body {padding-top:var(--pureddit-shell-height, 130px)!important;}
 ${scope} reddit-header-large, ${scope} shreddit-header {top:var(--pureddit-shell-height, 130px)!important;}
-${scope}[data-pureddit-native=modern] shreddit-post {display:block;max-width:800px;margin:0 auto;padding:16px 0;border-bottom:1px solid ${border};}
+${scope}[data-pureddit-native=modern] shreddit-post {max-width:800px;margin:0 auto;padding:16px 0;border-bottom:1px solid ${border};}
 ${scope}[data-pureddit-native=modern] shreddit-post [slot=post-media-container], ${scope}[data-pureddit-native=modern] shreddit-post [slot=post-media-preview] {width:100%;max-height:780px;object-fit:contain;border-radius:14px;}
 ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px' : '12px'};}`;
     if (!style.isConnected) document.documentElement.append(style);

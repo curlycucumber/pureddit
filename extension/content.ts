@@ -19,10 +19,12 @@ async function start() {
   let ui: ReturnType<typeof mountReader> | undefined;
   let loadingFallback = false; let emptySince = 0; let emptyTimer = 0;
   let departing = false; let suppressed = false; let lastVisit = ''; let lastUrl = ''; let timer = 0;
-  const registry = new RootRegistry();
-  const parsedPosts = new WeakMap<Element, Post>();
+  let registry: RootRegistry | undefined;
+  const discovery = () => registry ||= new RootRegistry();
+  let liveNative = false;
+  let parsedPosts = new WeakMap<Element, Post>();
   let rootsDirty = true; let cachedRoots: Array<Document | ShadowRoot> = [];
-  const rootsNow = () => { if (rootsDirty) { cachedRoots = registry.snapshot(); rootsDirty = false; } return cachedRoots; };
+  const rootsNow = () => { if (rootsDirty) { cachedRoots = discovery().snapshot(false); rootsDirty = false; } return cachedRoots; };
   let lastCards = new Map<Element,string>(); let routeCards = new Map<Element,string>();
   let pendingUrl = ''; let navigationTimer = 0;
   function cancelNavigation() { clearTimeout(navigationTimer); navigationTimer = 0; pendingUrl = ''; departing = false; }
@@ -39,7 +41,7 @@ async function start() {
   const filteredNative = new Set<Element>();
   const clearNativeFilters = () => { for (const node of filteredNative) node.removeAttribute('data-pureddit-filtered'); filteredNative.clear(); };
   const nativeStyles = new Map<ShadowRoot, HTMLStyleElement>();
-  let observed = new Set<ShadowRoot>();
+  let observed = new Set<ShadowRoot>(); let observing = false;
   let cacheKey = ''; const postCache = new Map<string, Post>();
   const adStyle = document.createElement('style'); adStyle.id = 'pureddit-native-ad-style';
   // Cosmetic ad hiding also applies when the original native feed is visible.
@@ -67,7 +69,8 @@ async function start() {
   }
   function showOriginal(keepNavigation = false) { if (!keepNavigation) cancelNavigation(); loadingFallback = false; suppressed = true; restore(); skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
-    const control = nativeControl(action);
+    cachedRoots = discovery().snapshot(); rootsDirty = false;
+    const control = nativeControl(action, cachedRoots);
     nativeActive = true; showOriginal();
     if (!pageFromUrl(location.href)) suppressed = false;
     if (control) { control.focus(); control.click(); return; }
@@ -146,7 +149,12 @@ async function start() {
     button.addEventListener('click', () => { cancelNavigation(); rendered = ''; suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
   }
   function refresh() {
-    if (!preferences.enabled) cancelNavigation();
+    if (!preferences.enabled) {
+      cancelNavigation(); observer.disconnect();
+      if (observing || registry) { registry = undefined; rootsDirty = true; cachedRoots = []; parsedPosts = new WeakMap(); lastCards.clear(); routeCards.clear(); homeController.reset(); }
+      observing = false; observed.clear();
+    }
+    else if (!observing) { observer.observe(document.documentElement, observation); observing = true; }
     // A native router may canonicalize the destination or the user may press
     // Back. Any real URL transition must release the pending-navigation guard.
     if ((departing || pendingUrl) && location.href === lastUrl) return;
@@ -162,6 +170,7 @@ async function start() {
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? rootsNow() : [];
     const liveModern = Boolean(preferences.enabled && page && preferences.appearance === 'modern' && document.querySelector('shreddit-app') && (!suppressed || nativeActive));
+    liveNative = liveModern;
     if (liveModern) homeFeed = page!.kind === 'home' ? homeController.select(homeMode, restore, roots) : undefined;
     skin(liveModern || preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
     if (!liveModern) nativeSkin.feed(null, undefined, () => {});
@@ -238,7 +247,9 @@ async function start() {
   const flush = () => { cancelAnimationFrame(frame); clearTimeout(timer); frame = 0; timer = 0; refresh(); };
   const schedule = () => { if (document.hidden) return; if (!timer) { timer = window.setTimeout(flush, 80); if (!document.hidden) frame = requestAnimationFrame(flush); } };
   const observer = new MutationObserver(records => {
+    if (!preferences.enabled) return;
     let relevant = false;
+    const added = new Set<Element>();
     for (const record of records) {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
       if (target?.closest('#pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) continue;
@@ -248,39 +259,41 @@ async function start() {
         const card = ancestor.closest('shreddit-post, .thing.link'); if (card) { parsedPosts.delete(card); touchedCard = true; }
         const owner = ancestor.getRootNode(); ancestor = owner instanceof ShadowRoot ? owner.host : null;
       }
-      if (record.type === 'characterData') { if (touchedCard || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
+      if (record.type === 'characterData') { if (!liveNative && touchedCard || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
       else if (record.type === 'attributes') {
+        if (liveNative && touchedCard && !['class', 'hidden', 'slot', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'is-recommended', 'data-recommended', 'recommendation-reason', 'data-testid'].includes(record.attributeName || '')) continue;
         if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
       } else {
         const owner = record.target.getRootNode();
         if (owner instanceof ShadowRoot && nativeStyles.has(owner) && !nativeStyles.get(owner)!.isConnected) relevant = true;
         if (target?.closest('shreddit-post, .thing.link, [role=tablist]')) relevant = true;
-        for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { if (node.isConnected) registry.add(node); rootsDirty = true; relevant = true; }
+        for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { if (node.isConnected) added.add(node); rootsDirty = true; relevant = true; }
       }
     }
+    if (added.size) registry?.addAll(added);
     if (relevant) schedule();
   });
   const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
-  observer.observe(document.documentElement, observation);
+  observer.observe(document.documentElement, observation); observing = true;
   window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { rootsDirty = true; schedule(); } });
   const poll = window.setInterval(() => {
-    if (document.hidden) return;
+    if (document.hidden || !preferences.enabled) return;
     if (location.href !== lastUrl) { rootsDirty = true; schedule(); }
     else if (!suppressed && homeFeed?.status === 'switching') schedule();
     else if (preferences.enabled && pageFromUrl(location.href) && Date.now() - lastRootScan >= 1500) {
       lastRootScan = Date.now();
       // Attaching a shadow root does not generate a light-DOM mutation.
-      const discovered = registry.snapshot();
+      const discovered = discovery().snapshot();
       if (discovered.some(root => !cachedRoots.includes(root) || root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) { cachedRoots = discovered; rootsDirty = false; schedule(); }
     }
   }, 250);
   extensionApi()?.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[KEY]) {
       const next = normalizePreferences(changes[KEY].newValue);
-      if (!preferences.enabled && next.enabled) suppressed = false;
+      if (!preferences.enabled && next.enabled) { suppressed = false; registry = undefined; rootsDirty = true; cachedRoots = []; parsedPosts = new WeakMap(); }
       preferences = next; refresh();
     }
   });
