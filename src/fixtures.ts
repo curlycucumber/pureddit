@@ -10,7 +10,8 @@ const rows = [
 ];
 export function createFixture(kind: 'modern' | 'old', feed: string) {
   const root = document.createElement('div');
-  rows.filter(row => feed === 'news' ? row[0] === 'news' : !['home', 'popular'].includes(feed) ? row[0].toLowerCase() === feed.toLowerCase() : true).forEach((row, index) => {
+  rows.forEach((row, index) => {
+    if (feed === 'news' ? row[0] !== 'news' : !['home', 'popular'].includes(feed) && row[0].toLowerCase() !== feed.toLowerCase()) return;
     const [community, title, author, score, comments, image] = row;
     const permalink = `/r/${community}/comments/sample${index}/sample_discussion/`;
     const card = document.createElement(kind === 'modern' ? 'shreddit-post' : 'div');

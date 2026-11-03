@@ -80,3 +80,9 @@ The bundled content/popup scripts run in a **browser harness with simulated exte
 The GitHub workflow runs the build, tests, and Firefox validator. On GitHub-hosted runners it can additionally test the preview/harness in the Firefox engine. Optional manual Safari-project generation runs on macOS; that workflow must succeed before claiming an Xcode project has been produced. Store signing/submission and iPhone installation are separate steps requiring the owner's accounts.
 
 Sample photography in the Vercel preview retains its notices in `public/images/`. It is not included in extension packages.
+
+## Interactive discussion preview
+
+On the Vercel preview, click a sample post title or its comment count to open a discussion. Try post/comment votes, nested replies, collapsing threads, Best/New sorting, saving a post, and copying the preview link. Modern/Old and Light/Dark controls remain available. Back to feed and browser Back/Forward preserve your place; hash links can open a sample discussion directly.
+
+Discussion text, votes, saves, and drafts live only in page memory and reset on reload. No Reddit credentials, API requests, or account writes are involved. These are clearly labeled interaction mock-ups; the installed extension still opens Reddit's native discussion/account interface. The preview does not establish that Reddit's own commenting UI matches the sample.

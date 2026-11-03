@@ -76,8 +76,11 @@ test('modern cards use the reference hierarchy and working menus without simulat
   await expect(post.locator('.post-time')).toContainText('hr. ago');
   await expect(post.locator('.source-link')).toHaveAttribute('href','https://example.org/reading/design/');
   await expect(post.getByRole('link',{name:'Join or manage r/Design on Reddit'})).toHaveAttribute('href','https://www.reddit.com/r/Design/');
-  await expect(post.getByRole('link',{name:'Vote on Reddit, 1248 points'})).toHaveAttribute('href',/\/r\/Design\/comments\//);
-  await expect(post.getByRole('link',{name:'86 comments',exact:true})).toHaveAttribute('href',/\/r\/Design\/comments\//);
+  for(const link of [post.getByRole('link',{name:'Vote on Reddit, 1248 points'}),post.getByRole('link',{name:'86 comments',exact:true})]) {
+    const destination=new URL((await link.getAttribute('href'))!,page.url());
+    expect(destination.origin).toBe(new URL(page.url()).origin);
+    expect(new URLSearchParams(destination.hash.slice(1)).get('post')).toBe('t3_sample0');
+  }
   await post.locator('.post-menu summary').click();
   await expect(post.getByRole('button',{name:'Copy post link'})).toBeVisible();
   await post.getByRole('button',{name:'Copy post link'}).click();
@@ -131,7 +134,8 @@ test('top-of-page layout and theme controls work together and persist after relo
 test('sample links are clearly simulated and all development packages can be downloaded', async ({ page, request }) => {
   await page.goto('/');
   await page.locator('#reader-host').locator('.post-title').first().click();
-  await expect(page.locator('.preview-message')).toContainText('not live Reddit posts');
+  await expect(page.locator('#reader-host').locator('.reader')).toHaveAttribute('data-view', 'discussion');
+  await expect(page.locator('#reader-host').getByText(/Sample discussion/).first()).toBeVisible();
   // Downloads are generated into the production build rather than Vite's dev public directory.
   for (const browser of ['chrome','firefox','safari']) {
     const link = page.getByRole('link',{name: browser==='safari'?'Safari source ↓':`${browser==='chrome'?'Chrome':'Firefox'} package ↓`});
