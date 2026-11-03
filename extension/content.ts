@@ -1,8 +1,9 @@
+import { RootRegistry } from './roots';
 import { extractPosts } from '../shared/extract';
 import { mountReader } from '../shared/reader';
 import { DEFAULTS, HOME_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
-import { AD_SELECTOR } from '../shared/feed';
-import { HomeFeedController, nativeControl, nativeRoots, nativeLink, cardSnapshot } from './native';
+import { isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
+import { HomeFeedController, nativeControl, nativeLink, cardSnapshot } from './native';
 import { nativeAppearance, nativePage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
 declare const __PUREDDIT_THEME__: string;
@@ -18,8 +19,10 @@ async function start() {
   let ui: ReturnType<typeof mountReader> | undefined;
   let loadingFallback = false; let emptySince = 0; let emptyTimer = 0;
   let departing = false; let suppressed = false; let lastVisit = ''; let lastUrl = ''; let timer = 0;
+  const registry = new RootRegistry();
+  const parsedPosts = new WeakMap<Element, Post>();
   let rootsDirty = true; let cachedRoots: Array<Document | ShadowRoot> = [];
-  const rootsNow = () => { if (rootsDirty) { cachedRoots = nativeRoots(); rootsDirty = false; } return cachedRoots; };
+  const rootsNow = () => { if (rootsDirty) { cachedRoots = registry.snapshot(); rootsDirty = false; } return cachedRoots; };
   let lastCards = new Map<Element,string>(); let routeCards = new Map<Element,string>();
   let pendingUrl = ''; let navigationTimer = 0;
   function cancelNavigation() { clearTimeout(navigationTimer); navigationTimer = 0; pendingUrl = ''; departing = false; }
@@ -33,18 +36,20 @@ async function start() {
     if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
     if (enabled) nativeSkin.update(preferences); else nativeSkin.clear();
   }
+  const filteredNative = new Set<Element>();
+  const clearNativeFilters = () => { for (const node of filteredNative) node.removeAttribute('data-pureddit-filtered'); filteredNative.clear(); };
   const nativeStyles = new Map<ShadowRoot, HTMLStyleElement>();
-  const observed = new WeakSet<ShadowRoot>();
+  let observed = new Set<ShadowRoot>();
   let cacheKey = ''; const postCache = new Map<string, Post>();
   const adStyle = document.createElement('style'); adStyle.id = 'pureddit-native-ad-style';
   // Cosmetic ad hiding also applies when the original native feed is visible.
-  adStyle.textContent = AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
+  adStyle.textContent = '[data-pureddit-filtered]{display:none!important}' + AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
   function adFiltering(enabled: boolean, roots: Array<Document | ShadowRoot> = []) {
     if (enabled) {
       if (!adStyle.isConnected) document.documentElement.append(adStyle); document.documentElement.setAttribute('data-pureddit-feed', '');
-      for (const root of roots) if (root instanceof ShadowRoot) {
+    for (const root of roots) if (root instanceof ShadowRoot) {
         let style = nativeStyles.get(root);
-        if (!style) { style = document.createElement('style'); style.textContent = AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
+        if (!style) { style = document.createElement('style'); style.textContent = '[data-pureddit-filtered]{display:none!important}' + AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
         if (style.parentNode !== root) root.append(style);
       }
       for (const [root, style] of nativeStyles) if (!root.host.isConnected) { style.remove(); nativeStyles.delete(root); }
@@ -156,11 +161,15 @@ async function start() {
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? rootsNow() : [];
-    skin(preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
+    const liveModern = Boolean(preferences.enabled && page && preferences.appearance === 'modern' && document.querySelector('shreddit-app') && (!suppressed || nativeActive));
+    if (liveModern) homeFeed = page!.kind === 'home' ? homeController.select(homeMode, restore, roots) : undefined;
+    skin(liveModern || preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
+    if (!liveModern) nativeSkin.feed(null, undefined, () => {});
+    if ([...observed].some(root => !root.host.isConnected)) { observer.disconnect(); observer.observe(document.documentElement, observation); observed = new Set(); }
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page), roots);
     if (!preferences.enabled || !page) {
-      restore(); host?.remove();
+      clearNativeFilters(); restore(); host?.remove();
       if (!preferences.enabled || !nativePage(location.href) || !suppressed) { toggle?.remove(); toggle = undefined; } else { ensureToggle(); toggle!.hidden = false; }
       host = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); rendered = ''; clearTimeout(emptyTimer); emptyTimer = 0; emptySince = 0; return;
     }
@@ -168,6 +177,22 @@ async function start() {
       lastVisit = page.community.toLowerCase(); const next = visit(preferences, page.community);
       preferences = next; void savePreferences(next).catch(() => { storageError = true; });
     }
+    if (liveModern) {
+      restore();
+      if (host) { host.hidden = true; host.style.display = 'none'; }
+      if (toggle) toggle.hidden = true;
+      const stale = page.kind === 'home' && homeMode === 'following' ? new Set(homeController.staleCards(roots)) : new Set<Element>();
+      const flagged = new Set<Element>();
+      for (const root of roots) for (const card of root.querySelectorAll('shreddit-post, .thing.link')) {
+        if (isAdvertisement(card) || page.kind === 'home' && (homeFeed?.status !== 'ready' || stale.has(card) || homeMode === 'following' && isRecommendation(card))) flagged.add(card);
+      }
+      for (const card of filteredNative) if (!flagged.has(card)) card.removeAttribute('data-pureddit-filtered');
+      for (const card of flagged) if (!card.hasAttribute('data-pureddit-filtered')) card.setAttribute('data-pureddit-filtered','');
+      filteredNative.clear(); for (const card of flagged) filteredNative.add(card);
+      nativeSkin.feed(page, homeFeed, value => { if (homeMode !== value) { homeMode = value; homeController.reset(); } refresh(); });
+      return;
+    }
+    clearNativeFilters();
     if (host && !host.isConnected) { restore(); toggle?.remove(); host = undefined; ui = undefined; }
     if (!host) { create(); rendered = ''; }
     if (suppressed && loadingFallback && roots.some(root => extractPosts(root, location.href).posts.length > 0)) { loadingFallback = false; suppressed = false; nativeActive = false; emptySince = 0; skin(false); }
@@ -183,7 +208,7 @@ async function start() {
     const unchanged = new Set([...currentCards].filter(([node,value]) => routeCards.get(node) === value).map(([node]) => node));
     if (page.kind === 'home' && homeMode === 'following') for (const node of homeController.staleCards(roots)) unchanged.add(node);
     lastCards = currentCards;
-    const options = { excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
+    const options = { cache: parsedPosts, excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
     for (const root of roots) if (root instanceof ShadowRoot) {
       const extra = extractPosts(root, location.href, options); extracted.posts.push(...extra.posts); extracted.filtered += extra.filtered; extracted.excluded.push(...extra.excluded);
@@ -209,35 +234,46 @@ async function start() {
     if (signature !== rendered) { rendered = signature; ui!.update({ ...extracted, page, preferences, preview: false, homeFeed }); }
     if (storageError) ui!.message('Browser preferences could not be saved. The reading view still works in this tab.');
   }
-  const schedule = () => { if (!timer) timer = window.setTimeout(() => { timer = 0; refresh(); }, 120); };
+  let frame = 0;
+  const flush = () => { cancelAnimationFrame(frame); clearTimeout(timer); frame = 0; timer = 0; refresh(); };
+  const schedule = () => { if (document.hidden) return; if (!timer) { timer = window.setTimeout(flush, 80); if (!document.hidden) frame = requestAnimationFrame(flush); } };
   const observer = new MutationObserver(records => {
     let relevant = false;
     for (const record of records) {
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
       if (target?.closest('#pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) continue;
-      if (record.type === 'attributes') {
+      let touchedCard = false;
+      let ancestor: Element | null = target || null;
+      while (ancestor) {
+        const card = ancestor.closest('shreddit-post, .thing.link'); if (card) { parsedPosts.delete(card); touchedCard = true; }
+        const owner = ancestor.getRootNode(); ancestor = owner instanceof ShadowRoot ? owner.host : null;
+      }
+      if (record.type === 'characterData') { if (touchedCard || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
+      else if (record.type === 'attributes') {
         if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
       } else {
         const owner = record.target.getRootNode();
         if (owner instanceof ShadowRoot && nativeStyles.has(owner) && !nativeStyles.get(owner)!.isConnected) relevant = true;
         if (target?.closest('shreddit-post, .thing.link, [role=tablist]')) relevant = true;
-        for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { rootsDirty = true; relevant = true; }
+        for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { if (node.isConnected) registry.add(node); rootsDirty = true; relevant = true; }
       }
     }
     if (relevant) schedule();
   });
-  const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
+  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation);
   window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { rootsDirty = true; schedule(); } });
   const poll = window.setInterval(() => {
+    if (document.hidden) return;
     if (location.href !== lastUrl) { rootsDirty = true; schedule(); }
     else if (!suppressed && homeFeed?.status === 'switching') schedule();
     else if (preferences.enabled && pageFromUrl(location.href) && Date.now() - lastRootScan >= 1500) {
       lastRootScan = Date.now();
       // Attaching a shadow root does not generate a light-DOM mutation.
-      const discovered = nativeRoots();
+      const discovered = registry.snapshot();
       if (discovered.some(root => !cachedRoots.includes(root) || root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) { cachedRoots = discovered; rootsDirty = false; schedule(); }
     }
   }, 250);
@@ -248,7 +284,7 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); clearTimeout(emptyTimer); cancelNavigation(); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); cancelNavigation(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();

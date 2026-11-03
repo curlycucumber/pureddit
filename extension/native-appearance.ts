@@ -1,4 +1,4 @@
-import { pageFromUrl, type Preferences } from '../shared/model';
+import { pageFromUrl, type Page, type HomeFeed, type HomeMode, type Preferences } from '../shared/model';
 import { mountReader, type ReaderActions } from '../shared/reader';
 
 // Keep Reddit's real forms, editors, menus and events; only apply appearance.
@@ -27,6 +27,8 @@ ${scope} shreddit-comment {--color-action-upvote:#d94b16;--color-action-downvote
 ${scope}[data-pureddit-native=old] shreddit-comment {font-size:12px;--rem14:12px;--rem16:13px;}
 ${scope} body {padding-top:var(--pureddit-shell-height, 130px)!important;}
 ${scope} reddit-header-large, ${scope} shreddit-header {top:var(--pureddit-shell-height, 130px)!important;}
+${scope}[data-pureddit-native=modern] shreddit-post {display:block;max-width:800px;margin:0 auto;padding:16px 0;border-bottom:1px solid ${border};}
+${scope}[data-pureddit-native=modern] shreddit-post [slot=post-media-container], ${scope}[data-pureddit-native=modern] shreddit-post [slot=post-media-preview] {width:100%;max-height:780px;object-fit:contain;border-radius:14px;}
 ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px' : '12px'};}`;
     if (!style.isConnected) document.documentElement.append(style);
     if (!panel || !panel.isConnected) {
@@ -56,11 +58,31 @@ ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px'
     reader!.update({posts:[],filtered:0,excluded:[],layout:'unsupported',page:pageFromUrl(location.href)||pageFromUrl('https://www.reddit.com/r/popular/')!,preferences,preview:false});
     offset();
   }
+  let lastFeed = '';
+  function feed(page: Page | null, home: HomeFeed | undefined, change: (value: HomeMode) => void) {
+    const root = panel?.shadowRoot; if (!root) return;
+    if (!page) { const section=root.querySelector<HTMLElement>('.live-home'); if (section && !section.hidden) { section.hidden=true; offset(); } lastFeed=''; return; }
+    const signature = JSON.stringify([page,home]); if (signature === lastFeed && root.querySelector('.live-home')) return; lastFeed = signature;
+    root.querySelectorAll<HTMLAnchorElement>('.native-feeds a').forEach(link => { if (new URL(link.href).pathname === (page.kind === 'home' ? '/' : `/r/${page.community}/`)) link.setAttribute('aria-current','page'); else link.removeAttribute('aria-current'); });
+    let section = root.querySelector<HTMLElement>('.live-home');
+    if (!section) { section = document.createElement('section'); section.className='live-home'; section.style.cssText='padding:8px 20px;font-size:12px'; root.querySelector('.reader')!.append(section); }
+    section.hidden = page.kind !== 'home'; section.replaceChildren();
+    if (page.kind === 'home') {
+      const tabs=document.createElement('div');tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Home feed');
+      for (const [label,mode] of [['Your Feed','following'],['Suggested Feed','for-you']] as const) {
+        const button=document.createElement('button');button.type='button';button.textContent=label;button.setAttribute('role','tab');button.setAttribute('aria-selected',String(home?.mode===mode));button.tabIndex=home?.mode===mode?0:-1;button.style.cssText='padding:8px 14px;border:1px solid #80808060;border-radius:18px;background:transparent;color:inherit;margin-right:6px';if(home?.mode===mode)button.style.fontWeight='700';button.onclick=()=>change(mode);tabs.append(button);
+      }
+      tabs.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const mode=event.key==='Home'?'following':event.key==='End'?'for-you':home?.mode==='following'?'for-you':'following';change(mode);root.querySelector<HTMLButtonElement>(`.live-home [aria-selected=true]`)?.focus();}};
+      section.append(tabs);
+      if (home?.status !== 'ready') {const message=document.createElement('p');message.setAttribute('role','status');message.textContent=home?.message||'Waiting for Reddit’s feed.';const button=document.createElement('button');button.textContent='Open Reddit’s feed controls';button.onclick=actions.original;section.append(message,button);}
+    }
+    offset();
+  }
   function status(text: string) {
     const root=panel?.shadowRoot; if (!root) return;
     let message=root.querySelector<HTMLElement>('.native-status');
     if (!message) { message=document.createElement('p'); message.className='native-status'; message.setAttribute('role','status'); message.style.cssText='padding:8px 20px;font-size:12px'; root.querySelector('.reader')!.append(message); }
     message.textContent=text; offset();
   }
-  return {update,clear,status,connected: () => Boolean(panel?.isConnected && style.isConnected)};
+  return {update,clear,status,feed,connected: () => Boolean(panel?.isConnected && style.isConnected)};
 }

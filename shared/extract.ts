@@ -28,29 +28,33 @@ function createdAt(element: Element) {
   const date = new Date(numeric === undefined ? raw : numeric < 1e12 ? numeric * 1000 : numeric);
   if (Number.isFinite(date.getTime())) return date.toISOString();
 }
-export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element> } = {}): Extraction {
+export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element>; cache?: WeakMap<Element, Post> } = {}): Extraction {
   const modern = [...root.querySelectorAll('shreddit-post')];
   const old = [...root.querySelectorAll('.thing.link')];
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
   const posts: Post[] = []; const excluded: string[] = []; const seen = new Set<string>(); let filtered = 0;
   for (const element of modern.length ? modern : old) {
-    const href = [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
+    const cached = options.cache?.get(element);
+    const href = cached?.href || [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
       .map(value => postUrl(value || '')).find(Boolean);
     if (options.excludeElements?.has(element) || element.closest('[hidden]')) { if (href) excluded.push(href); continue; }
     if (isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
+    if (cached && !seen.has(cached.href)) { seen.add(cached.href); posts.push(cached); continue; }
     const title = text(element.getAttribute('post-title') || element.querySelector('a.title, [slot="title"], h1, h2, h3')?.textContent);
     const community = text(element.getAttribute('subreddit-prefixed-name') || element.getAttribute('subreddit-name') || element.getAttribute('data-subreddit')).replace(/^r\//, '');
     if (!title || !href || !community || seen.has(href)) continue;
     seen.add(href);
-    posts.push({ id: element.getAttribute('id') || element.getAttribute('data-fullname') || href, title, community, href,
+    const post: Post = { id: element.getAttribute('id') || element.getAttribute('data-fullname') || href, title, community, href,
       author: text(element.getAttribute('author') || element.querySelector('a.author')?.textContent) || undefined,
       score: text(element.getAttribute('score') || element.querySelector('.score.unvoted, .score')?.textContent) || undefined,
       comments: text(element.getAttribute('comment-count') || element.querySelector('a.comments')?.textContent).replace(/\s*comments?$/i, '') || undefined,
+      mediaKind: /^(image|gallery)$/.test(element.getAttribute('post-type') || element.getAttribute('data-post-type') || '') ? 'image' : (element.getAttribute('post-type') || element.getAttribute('data-post-type')) === 'video' ? 'video' : undefined,
       thumbnail: thumbnail(element, base),
       communityIcon: imageUrl(element.querySelector('shreddit-subreddit-avatar img, [data-testid="subreddit-icon"] img, img.subreddit-icon')?.getAttribute('src'), base),
       createdAt: createdAt(element),
       externalUrl: externalUrl(element.getAttribute('content-href')) || externalUrl(element.querySelector('a.title, a[data-testid="outbound-link"], a[slot="outbound-link"]')?.getAttribute('href')),
-    });
+    };
+    options.cache?.set(element, post); posts.push(post);
   }
   return { posts, filtered, excluded, layout };
 }

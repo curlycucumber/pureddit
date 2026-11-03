@@ -93,9 +93,9 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.3.8
+### Updating Chrome to 0.3.9
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.8** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.9** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
 
@@ -108,3 +108,7 @@ Version 0.3.6 dispatches navigation through Reddit’s native links/router inste
 Version 0.3.7 labels the Home tabs **Your Feed** and **Suggested Feed**, mapped respectively to native Reddit **Following** and **For You**. Your Feed is always the startup/Home default. Test loading with Reddit initially on For You, choosing Suggested Feed, clicking Home again on the same URL, and reloading. None should make Suggested Feed the default. Native selection must be confirmed before displaying Your Feed; unrecognized native controls show an explanation instead of relabeling suggestions.
 
 Version 0.3.8 fixes cancellation of stalled navigation, redirected destinations with canonical query parameters, stale tab CSS overriding explicit deselection, and native-hidden cards remaining in the cache. Disabling the extension also cancels pending navigation immediately. Regression cases were reproduced before the fixes and pass afterward.
+
+Version 0.3.9 changes current-site Modern feeds to native Reddit content with Pureddit theming and a header. Image and video posts use Reddit’s full media component beneath the title; external article links keep Reddit’s link preview treatment. No player is cloned/reparented, and Pureddit never changes autoplay, mute, playback or profile preferences. Reddit and the browser determine playback. Old and unsupported/legacy app shells retain the compact/compatibility reader.
+
+Test autoplay with your Reddit profile setting both enabled and disabled, media controls, galleries, sensitive-content gates, scrolling/infinite loading, and native voting/commenting. Confirm Your Feed remains default and ads/marked recommendations stay hidden. Switch Modern → Old → Modern and verify settings and native controls survive. The Vercel image preview is illustrative and does not connect to Reddit settings or play real Reddit videos.

@@ -52,6 +52,8 @@ export class HomeFeedController {
   private priorFeed = new Map<Element,string>();
   reset() { this.attempted = ''; this.pendingKey = ''; this.previousCards = undefined; this.priorFeed.clear(); }
   staleCards(roots: Array<Document | ShadowRoot>) {
+    for (const node of this.priorFeed.keys()) if (!node.isConnected) this.priorFeed.delete(node);
+    if (!this.priorFeed.size) return [];
     return [...this.cards(roots)].filter(([node,value]) => this.priorFeed.get(node) === value).map(([node]) => node);
   }
   private cards(roots: Array<Document | ShadowRoot>) {

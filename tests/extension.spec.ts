@@ -461,3 +461,69 @@ test('native-hidden cards are evicted from the reading cache', async({context,pa
   await page.locator('#native shreddit-post').first().evaluate(node=>{(node as HTMLElement).hidden=true;});
   await expect(reader.getByRole('article')).toHaveCount(0);
 });
+
+test('Modern uses native media without duplicating players or changing autoplay preferences', async({context,page})=>{
+  const native=fixture.replace('<div id="native">','<shreddit-app><div id="native">').replace('</body>','</shreddit-app></body>');
+  await harness(context);await context.route('https://www.reddit.com/r/news/',route=>route.fulfill({contentType:'text/html',body:native}));
+  await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{
+    const post=document.querySelector('shreddit-post')!;post.innerHTML='<h2>A native video post</h2><video slot="post-media-container" autoplay muted controls></video><img slot="post-media-preview" src="https://i.redd.it/preview.jpg">';
+    (window as any).originalPlayer=post.querySelector('video');(window as any).playerParent=post;(window as any).playerCalls=0;
+    HTMLMediaElement.prototype.play=async()=>{(window as any).playerCalls++;};HTMLMediaElement.prototype.pause=()=>{(window as any).playerCalls++;};
+  });
+  await inject(page);const shell=page.locator('#pureddit-native-controls');await expect(shell).toBeVisible();await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
+  await expect(page.locator('video')).toHaveAttribute('autoplay','');await shell.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await page.evaluate(()=>{(window as any).originalPlayer.autoplay=false;});
+  await shell.getByRole('button',{name:'Old layout',exact:true}).click();await expect(page.locator('#pureddit-extension-root')).toBeVisible();
+  await page.locator('#pureddit-extension-root').getByRole('button',{name:'Modern layout',exact:true}).click();await expect(shell).toBeVisible();
+  expect(await page.evaluate(()=>({same:document.querySelector('video')===(window as any).originalPlayer,parent:(window as any).originalPlayer.parentElement===(window as any).playerParent,autoplay:(window as any).originalPlayer.autoplay,calls:(window as any).playerCalls}))).toEqual({same:true,parent:true,autoplay:false,calls:0});
+  await expect(page.locator('video')).toHaveCount(1);await expect(page.locator('shreddit-post[promoted=true]')).toBeHidden();
+});
+
+test('native Modern Home defaults to Your Feed and filters suggestions without replacing content', async({context,page})=>{
+  const native=homeFixture.replace('<body>','<body><shreddit-app>').replace('</body>','</shreddit-app></body>');
+  await harness(context,native);await page.goto('https://www.reddit.com/');await inject(page);const shell=page.locator('#pureddit-native-controls');
+  await expect(shell.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('[data-native-mode=following]')).toHaveAttribute('aria-selected','true');
+  await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(1);
+  await shell.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(3);
+  await shell.getByRole('tab',{name:'Your Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(1);
+  await expect(page.locator('#native-feed shreddit-post[promoted]')).toBeHidden();
+});
+
+test('a one-card update reparses one card and preserves other rows, menu state and shortcut drafts', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{const host=document.getElementById('native')!;for(let i=0;i<100;i++){const post=document.createElement('shreddit-post');post.setAttribute('post-title',`Story ${i}`);post.setAttribute('subreddit-name','news');post.setAttribute('permalink',`/r/news/comments/perf${i}/title/`);post.setAttribute('score','1');host.append(post);}});
+  await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(101);
+  await reader.getByLabel('Add a shortcut',{exact:true}).fill('draft');await reader.getByRole('article').nth(2).locator('.post-menu summary').click();
+  await page.evaluate(()=>{
+    const root=document.querySelector('#pureddit-extension-root')!.shadowRoot!;(window as any).rows=[...root.querySelectorAll('article')];(window as any).parsed=0;
+    const query=Element.prototype.querySelector;Element.prototype.querySelector=function(selector:string){if(selector.startsWith('img[slot="post-media-preview"]'))(window as any).parsed++;return query.call(this,selector);} as typeof query;
+    document.querySelector('shreddit-post')!.setAttribute('score','999');
+  });
+  await expect(reader.locator('.score-number').first()).toHaveText('999');
+  expect(await page.evaluate(()=>(window as any).rows.filter((node:Node)=>node.isConnected).length)).toBe(100);
+  expect(await page.evaluate(()=>(window as any).parsed)).toBe(1);
+  await expect(reader.getByLabel('Add a shortcut',{exact:true})).toHaveValue('draft');await expect(reader.getByRole('article').nth(2).locator('.post-menu')).toHaveAttribute('open','');
+});
+
+test('background feed updates wait for visibility and resume with current metadata', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.locator('.score-number').first()).toHaveText('42');
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.querySelector('shreddit-post')!.setAttribute('score','321');});
+  await page.waitForTimeout(150);await expect(reader.locator('.score-number').first()).toHaveText('42');
+  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'));});
+  await expect(reader.locator('.score-number').first()).toHaveText('321');
+});
+
+test('cached metadata updates when a native link target or text node changes', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await page.evaluate(()=>{const post=document.querySelector('shreddit-post')!;post.removeAttribute('permalink');post.removeAttribute('post-title');post.innerHTML='<a slot="full-post-link" href="/r/news/comments/first1/title/"></a><h2>Initial native title</h2>';});
+  await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('link',{name:'Initial native title',exact:true})).toBeVisible();
+  await page.evaluate(()=>{document.querySelector('#native a[slot=full-post-link]')!.setAttribute('href','/r/news/comments/second1/title/');document.querySelector('#native h2')!.firstChild!.textContent='Updated native title';});
+  await expect(reader.getByRole('link',{name:'Updated native title',exact:true})).toHaveAttribute('href','https://www.reddit.com/r/news/comments/second1/title/');
+  // Keep previously seen cards when Reddit recycles a node for another post.
+  await expect(reader.getByRole('link',{name:'Initial native title',exact:true})).toHaveAttribute('href','https://www.reddit.com/r/news/comments/first1/title/');
+  await page.evaluate(()=>{document.querySelector('#native h2')!.firstChild!.textContent='Text-only metadata update';});
+  await expect(reader.getByRole('link',{name:'Text-only metadata update',exact:true})).toHaveAttribute('href','https://www.reddit.com/r/news/comments/second1/title/');
+  await expect(reader.getByRole('link',{name:'Updated native title',exact:true})).toHaveCount(0);
+});

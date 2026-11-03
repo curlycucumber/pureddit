@@ -148,3 +148,11 @@ test('preview reload defaults Home to Your Feed even after explicitly choosing S
   await reader.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(7);
   await page.reload();await expect(reader.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');await expect(reader.getByRole('article')).toHaveCount(3);
 });
+
+test('Modern image posts expand below the title while outbound articles keep their side preview', async({page})=>{
+  await page.goto('/');const reader=page.locator('#reader-host');
+  const image=reader.locator('.post').filter({has:page.getByRole('link',{name:'Early mornings in the mountains. Worth every minute.',exact:true})});
+  const article=reader.locator('.post').filter({has:page.getByRole('link',{name:'The quiet beauty of everyday objects, designed to last.',exact:true})});
+  const title=await image.locator('h2').boundingBox(), media=await image.locator('.thumbnail').boundingBox();expect(media!.y).toBeGreaterThanOrEqual(title!.y+title!.height);expect(media!.width).toBeGreaterThan(400);
+  expect((await article.locator('.thumbnail').boundingBox())!.width).toBe(148);
+});

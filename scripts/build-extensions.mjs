@@ -14,8 +14,8 @@ for (const browser of ['chrome', 'firefox', 'safari']) {
   if (browser === 'chrome') manifest.minimum_chrome_version = '109';
   if (browser === 'firefox') manifest.browser_specific_settings = { gecko: { id: 'pureddit@curlycucumber.github.io', strict_min_version: '142.0', data_collection_permissions: { required: ['none'] } } };
   await writeFile(path.join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  await build({ entryPoints: ['extension/content.ts'], outfile: path.join(directory, 'content.js'), bundle: true, format: 'iife', target: 'es2022', define: { __PUREDDIT_THEME__: JSON.stringify(css) } });
-  await build({ entryPoints: ['extension/popup.ts'], outfile: path.join(directory, 'popup.js'), bundle: true, format: 'iife', target: 'es2022' });
+  await build({ entryPoints: ['extension/content.ts'], outfile: path.join(directory, 'content.js'), bundle: true, minify: true, format: 'iife', target: 'es2022', define: { __PUREDDIT_THEME__: JSON.stringify(css) } });
+  await build({ entryPoints: ['extension/popup.ts'], outfile: path.join(directory, 'popup.js'), bundle: true, minify: true, format: 'iife', target: 'es2022' });
   await cp('extension/popup.html', path.join(directory, 'popup.html')); await cp('extension/popup.css', path.join(directory, 'popup.css'));
   await cp('extension/icons', path.join(directory, 'icons'), { recursive: true });
   const archive = {};

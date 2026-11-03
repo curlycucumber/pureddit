@@ -105,7 +105,8 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
     if (event.key === 'Escape' && reader.dataset.communities === 'open') { reader.dataset.communities = ''; find('.community-toggle').setAttribute('aria-expanded', 'false'); find<HTMLElement>('.community-toggle').focus(); }
   });
   const message = (text: string) => { const notice = find<HTMLElement>('.notice'); notice.textContent = text; notice.hidden = !text; };
-  let lastPosts = '';
+  let lastPosts = ''; let lastNavigation = '';
+  const cards = new Map<string,{signature:string; element:HTMLElement}>();
   return {
     update(model: ReaderModel) {
       const { page, preferences, posts } = model;
@@ -141,6 +142,9 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       find('.post-count').textContent = `${posts.length} posts`;
       find('.source-status').textContent = model.preview ? `${model.layout} · sample page` : `${model.layout === 'unsupported' ? 'Waiting for' : 'Reading'} Reddit`;
       find('.reading-note').textContent = model.preview ? 'Sample content for checking the shared extension layout. No live Reddit access is made from this preview.' : `Showing posts Reddit has loaded on this page.${model.filtered ? ` ${model.filtered} promoted or marked recommendation cards omitted.` : ''} Use Show Reddit to load more or use native account actions.`;
+      const navigation = JSON.stringify([page, preferences.pins, preferences.recent]);
+      if (navigation !== lastNavigation) {
+      lastNavigation = navigation;
       primary.replaceChildren();
       for (const [label, href, kind] of [['Home', HOME_URL, 'home'], ['Popular', 'https://www.reddit.com/r/popular/', 'popular'], ['News', 'https://www.reddit.com/r/news/', 'news']]) {
         const link = anchor(label, href, actions, page.kind === kind ? 'active' : ''); if (page.kind === kind) link.setAttribute('aria-current', 'page'); primary.append(link);
@@ -158,12 +162,28 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       for (const sort of ['new', 'hot', 'top']) {
         const link = anchor(sort[0].toUpperCase() + sort.slice(1), sortUrl(page, sort), actions, page.sort === sort ? 'selected' : ''); if (page.sort === sort) link.setAttribute('aria-current', 'true'); sorts.append(link);
       }
+      }
       const signature = JSON.stringify([posts, model.homeFeed?.status, model.homeFeed?.mode]);
       if (lastPosts !== signature) {
         lastPosts = signature;
-        const list = find('.posts'); list.replaceChildren();
-        posts.forEach((post, index) => list.append(postCard(post, actions, index + 1, message)));
+        const list = find('.posts');
+        if (posts.length) list.querySelector('.empty')?.remove();
+        const desired = new Set(posts.map(post => post.href));
+        for (const [href,card] of cards) if (!desired.has(href)) { card.element.remove(); cards.delete(href); }
+        let cursor: ChildNode | null = list.firstChild;
+        posts.forEach((post,index) => {
+          const signature = JSON.stringify(post), previous = cards.get(post.href);
+          let card = previous?.element;
+          if (!previous || previous.signature !== signature) {
+            card = postCard(post, actions, index + 1, message);
+            if (previous) { if (cursor === previous.element) cursor = card; previous.element.replaceWith(card); }
+            cards.set(post.href,{signature,element:card});
+          } else { const rank = card!.querySelector('.rank')!; if (rank.textContent !== String(index + 1)) rank.textContent = String(index + 1); }
+          if (card !== cursor) list.insertBefore(card!,cursor);
+          cursor = card!.nextSibling;
+        });
         if (!posts.length) {
+          list.replaceChildren();
           const empty = element('div', 'empty'); empty.append(element('h2', '', 'No supported posts loaded yet'), element('p', '', 'Reddit may still be loading, require sign-in, or use a page layout this version does not recognize.'));
           const button = element('button', 'original empty-action', 'Show original Reddit'); button.addEventListener('click', actions.original); empty.append(button); list.append(empty);
         }
@@ -174,6 +194,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
 }
 function postCard(post: Post, actions: ReaderActions, rank: number, message: (text: string) => void) {
   const article = element('article', 'post');
+  article.dataset.expandedMedia = String(Boolean(post.thumbnail && post.mediaKind));
   article.dataset.media = post.thumbnail ? 'image' : 'none';
   const number = element('span', 'rank', String(rank)); number.setAttribute('aria-hidden', 'true');
   const score = element('div', 'score-column');

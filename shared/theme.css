@@ -444,3 +444,8 @@ main{overflow:auto;min-width:0;padding:28px 30px;background:#fff;outline:none}.h
   .segmented button { padding: 5px 8px; font-size: 10px; gap: 4px; }
   .view-controls .icon { width: 12px; height: 12px; }
 }
+
+/* Image/video posts sit beneath the title; outbound stories keep compact previews. */
+.reader[data-appearance=modern] .post[data-expanded-media=true] { grid-template-columns:minmax(0,1fr);grid-template-areas:"meta" "title" "source" "media" "actions"; }
+.reader[data-appearance=modern] .post[data-expanded-media=true] .thumbnail { width:100%;height:auto;aspect-ratio:4/3;max-height:680px;border-radius:14px;background:#101214; }
+.reader[data-appearance=modern] .post[data-expanded-media=true] .thumbnail img { width:100%;height:100%;object-fit:contain; }
