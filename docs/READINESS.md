@@ -9,7 +9,7 @@ This is a development build. Automated fixture/harness checks cannot certify liv
 | Chronological `/new/` was being used as Home | Home defaults to Reddit's real Following tab; For You/Suggested is selectable on the same URL. No Home posts are shown until native tab selection is confirmed. |
 | Overlay covered native account controls | Top-bar Create post, Notifications, Account, and the navigation/subscriptions action restore Reddit and activate native controls. Native menus stay usable until the user returns to the reader. |
 | Recommendations and ads were always treated identically | For You includes recommendations; ads stay excluded. Other feed modes exclude recognized recommendations. |
-| Native feed ads could remain visible in Show Reddit | Scoped cosmetic ad CSS applies to supported native feed pages and public shadow roots, and is removed on disable or leaving a feed. |
+| Native ads could remain visible in Show Reddit or discussions | Scoped cosmetic filtering hides whole cards on supported feeds and native discussion/account pages, crosses open shadow roots, handles late ad-click/disclosure markers, and is removed on disable or leaving supported pages. |
 | Virtualized cards and late promotion labels | A bounded in-memory cache retains loaded cards and evicts content that later acquires an excluded marker. Native open-root updates are observed. |
 | No explicit continuation control | Load more delegates to Reddit's own scrolling/old Next link. No backend feed request is added. |
 | Generated Safari resources became stale | `npm run safari:sync` refreshes copied extension resources while preserving native project/signing files; unrelated targets are rejected. |

@@ -640,3 +640,51 @@ test('an unchanged dark page is not proof that Automatic changed to the explicit
 test('a disabled required Save button cannot turn an unsaved display selection into success', async({context,page})=>{
   await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:'<html><body class="theme-dark"><shreddit-app><fieldset aria-label="Display mode"><select aria-label="Display mode"><option value="light">Light</option><option value="dark" selected>Dark</option></select><button disabled>Save</button></fieldset></shreddit-app></body></html>'}));await page.goto('https://www.reddit.com/news');await inject(page);const shell=page.locator('#pureddit-native-controls');await shell.getByRole('button',{name:'Light mode',exact:true}).click();await expect(shell.getByRole('status')).toContainText('Reddit did not confirm Light');await expect(shell.getByRole('button',{name:'Dark mode',exact:true})).toHaveAttribute('aria-pressed','true');
 });
+
+test('native background ad-click links hide the complete ad card across nested shadow roots', async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><main><shreddit-post id="organic" post-title="Ordinary story" subreddit-name="news" permalink="/r/news/comments/organic1/title/"><h2>Ordinary story</h2></shreddit-post><shreddit-post id="advertisement" post-title="Come to learn about AI, stay for the people." subreddit-name="JoinETA" permalink="/r/news/comments/sponsor1/title/"><header>JoinETA · Ad</header><h2>Come to learn about AI, stay for the people.</h2><button>Buy Tickets</button><div id="ad-hitbox"></div></shreddit-post></main></shreddit-app></body></html>'}));await page.goto('https://www.reddit.com/news');await page.evaluate(()=>{document.getElementById('ad-hitbox')!.attachShadow({mode:'open'}).innerHTML='<a href="https://alb.reddit.com/cr?example=redacted" target="_blank" rel="noopener nofollow sponsored" role="link" data-ad-click-location="background" data-ad-click-action="1" aria-label="Advertisement: Come to learn about AI, stay for the people."><slot></slot></a>';});await inject(page);
+  await expect(page.locator('#advertisement')).toBeHidden();await expect(page.getByRole('button',{name:'Buy Tickets',exact:true})).toBeHidden();await expect(page.locator('#organic')).toBeVisible();
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').uncheck();await expect(page.locator('#advertisement')).toBeVisible();await expect(page.locator('#advertisement')).not.toHaveAttribute('data-pureddit-ad','');
+});
+
+test('Ad disclosure labels are detected in metadata, including late text changes, without hiding ordinary Ad text', async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><shreddit-post id="late-ad"><div slot="credit-bar"><a href="/user/sponsor">Sponsor</a><span id="disclosure">Loading</span></div><h2>Paid placement</h2></shreddit-post><shreddit-post id="normal"><header><a href="/user/Ad">Ad</a></header><h2>Ad</h2><div slot="text-body"><span>Ad</span><p>This discussion mentions sponsored posts and ads.</p></div></shreddit-post></shreddit-app></body></html>'}));await page.goto('https://www.reddit.com/news');await inject(page);await expect(page.locator('#late-ad')).toBeVisible();await expect(page.locator('#normal')).toBeVisible();await page.locator('#disclosure').evaluate(node=>{node.firstChild!.textContent='Ad';});await expect(page.locator('#late-ad')).toBeHidden();await expect(page.locator('#normal')).toBeVisible();
+  await page.locator('#disclosure').evaluate(node=>{node.firstChild!.textContent='2 hr. ago';});await expect(page.locator('#late-ad')).toBeVisible();
+});
+
+test('ad wrappers outside shreddit-post are hidden while nearby organic articles remain', async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><main><article id="ad-wrapper"><header><span>Ad</span></header><h2>Sponsored card</h2><a data-ad-click-location="background" href="https://alb.reddit.com/cr?example=redacted">Offer</a></article><article id="organic-wrapper"><header><h2>Ad</h2></header><p>An ordinary article about advertising.</p></article></main></shreddit-app></body></html>'}));await page.goto('https://www.reddit.com/news');await inject(page);await expect(page.locator('#ad-wrapper')).toBeHidden();await expect(page.locator('#organic-wrapper')).toBeVisible();
+});
+
+for (const appearance of ['modern', 'old']) test(`${appearance} evicts late shadow ad links, keeps ads hidden in native view and restores recycled organic cards`, async({context,page})=>{
+  await harness(context);
+  await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><main><shreddit-post id="organic" post-title="Ordinary story" subreddit-name="news" permalink="/r/news/comments/organic1/title/"><h2>Ordinary story</h2></shreddit-post><shreddit-post id="late-ad" post-title="Late paid placement" subreddit-name="news" permalink="/r/news/comments/later1/title/"><h2>Late paid placement</h2><div id="ad-host"></div></shreddit-post></main></shreddit-app></body></html>'}));
+  await page.goto('https://www.reddit.com/news');
+  await page.evaluate(appearance=>{
+    localStorage.setItem('pureddit.preferences.v1',JSON.stringify({appearance}));
+    const inner=document.createElement('div');document.getElementById('ad-host')!.attachShadow({mode:'open'}).append(inner);
+    inner.attachShadow({mode:'open'}).innerHTML='<a id="late-ad-link" href="https://example.org/article">Read more</a>';
+  },appearance);
+  await inject(page);const reader=page.locator('#pureddit-extension-root');
+  if(appearance==='old')await expect(reader.getByRole('article')).toHaveCount(2);
+  else await expect(page.locator('#late-ad')).toBeVisible();
+  await page.locator('#late-ad-link').evaluate(node=>node.setAttribute('href','https://alb.reddit.com/cr?example=redacted'));
+  if(appearance==='old'){
+    await expect(reader.getByRole('article')).toHaveCount(1);
+    await expect(reader.getByText('Late paid placement',{exact:true})).toHaveCount(0);
+    await reader.getByRole('button',{name:'Show Reddit ↗',exact:true}).click();
+  }
+  await expect(page.locator('#late-ad')).toBeHidden();await expect(page.locator('#organic')).toBeVisible();
+  if(appearance==='modern'){
+    await page.evaluate(()=>history.pushState({},'', '/r/news/comments/organic1/title/'));
+    await expect(page.locator('#pureddit-native-controls')).toBeVisible();
+    await expect(page.locator('#late-ad')).toHaveAttribute('data-pureddit-ad','');
+    await expect(page.locator('#late-ad')).toBeHidden();
+  }
+  await page.locator('#late-ad-link').evaluate(node=>node.setAttribute('href','https://example.org/article'));
+  await expect(page.locator('#late-ad')).toBeVisible();
+  if(appearance==='old'){
+    await page.getByRole('button',{name:'pureddit · Reading view'}).click();
+    await expect(reader.getByRole('article')).toHaveCount(2);
+  }
+});

@@ -28,7 +28,7 @@ function createdAt(element: Element) {
   const date = new Date(numeric === undefined ? raw : numeric < 1e12 ? numeric * 1000 : numeric);
   if (Number.isFinite(date.getTime())) return date.toISOString();
 }
-export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element>; cache?: WeakMap<Element, Post> } = {}): Extraction {
+export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element>; cache?: WeakMap<Element, Post>; advertisements?: ReadonlySet<Element> } = {}): Extraction {
   const modern = [...root.querySelectorAll('shreddit-post')];
   const old = [...root.querySelectorAll('.thing.link')];
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
@@ -38,7 +38,7 @@ export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', 
     const href = cached?.href || [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
       .map(value => postUrl(value || '')).find(Boolean);
     if (options.excludeElements?.has(element) || element.closest('[hidden]')) { if (href) excluded.push(href); continue; }
-    if (isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
+    if (options.advertisements?.has(element) || isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
     if (cached && !seen.has(cached.href)) { seen.add(cached.href); posts.push(cached); continue; }
     const title = text(element.getAttribute('post-title') || element.querySelector('a.title, [slot="title"], h1, h2, h3')?.textContent);
     const community = text(element.getAttribute('subreddit-prefixed-name') || element.getAttribute('subreddit-name') || element.getAttribute('data-subreddit')).replace(/^r\//, '');

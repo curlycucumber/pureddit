@@ -4,7 +4,7 @@ import { RootRegistry } from './roots';
 import { extractPosts } from '../shared/extract';
 import { mountReader } from '../shared/reader';
 import { DEFAULTS, HOME_URL, NEWS_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
-import { isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
+import { advertisementCards, isAdDisclosureMutation, isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
 import { HomeFeedController, nativeControl, nativeLink, cardSnapshot } from './native';
 import { nativeAppearance, nativePage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
@@ -45,22 +45,27 @@ async function start() {
   }
   const filteredNative = new Set<Element>();
   const clearNativeFilters = () => { for (const node of filteredNative) node.removeAttribute('data-pureddit-filtered'); filteredNative.clear(); };
+  let nativeAds = new Set<Element>();
   const nativeStyles = new Map<ShadowRoot, HTMLStyleElement>();
   let observed = new Set<ShadowRoot>(); let observing = false;
   let cacheKey = ''; const postCache = new Map<string, Post>();
   const adStyle = document.createElement('style'); adStyle.id = 'pureddit-native-ad-style';
   // Cosmetic ad hiding also applies when the original native feed is visible.
-  adStyle.textContent = '[data-pureddit-filtered]{display:none!important}' + AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
+  adStyle.textContent = '[data-pureddit-filtered],[data-pureddit-ad]{display:none!important}' + AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
   function adFiltering(enabled: boolean, roots: Array<Document | ShadowRoot> = []) {
     if (enabled) {
+      const ads = advertisementCards(roots);
+      for(const card of nativeAds)if(!ads.has(card))card.removeAttribute('data-pureddit-ad');
+      for(const card of ads)if(!card.hasAttribute('data-pureddit-ad'))card.setAttribute('data-pureddit-ad','');
+      nativeAds=ads;
       if (!adStyle.isConnected) document.documentElement.append(adStyle); document.documentElement.setAttribute('data-pureddit-feed', '');
     for (const root of roots) if (root instanceof ShadowRoot) {
         let style = nativeStyles.get(root);
-        if (!style) { style = document.createElement('style'); style.textContent = '[data-pureddit-filtered]{display:none!important}' + AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
+        if (!style) { style = document.createElement('style'); style.textContent = '[data-pureddit-filtered],[data-pureddit-ad]{display:none!important}' + AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
         if (style.parentNode !== root) root.append(style);
       }
       for (const [root, style] of nativeStyles) if (!root.host.isConnected) { style.remove(); nativeStyles.delete(root); }
-    } else { document.documentElement.removeAttribute('data-pureddit-feed'); adStyle.remove(); nativeStyles.forEach(style => style.remove()); nativeStyles.clear(); }
+    } else { for(const card of nativeAds)card.removeAttribute('data-pureddit-ad');nativeAds.clear();document.documentElement.removeAttribute('data-pureddit-feed'); adStyle.remove(); nativeStyles.forEach(style => style.remove()); nativeStyles.clear(); }
   }
   const originals = new Map<HTMLElement, { inert: boolean; hidden: string | null }>();
   const restore = () => {
@@ -199,7 +204,7 @@ async function start() {
     if (!liveModern) nativeSkin.feed(null, undefined, () => {});
     if ([...observed].some(root => !root.host.isConnected)) { observer.disconnect(); observer.observe(document.documentElement, observation); observed = new Set(); }
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
-    adFiltering(preferences.enabled && Boolean(page), roots);
+    adFiltering(preferences.enabled && Boolean(page || nativePage(location.href)), roots);
     if (!preferences.enabled || !page) {
       clearNativeFilters(); restore(); host?.remove();
       if (!preferences.enabled || !nativePage(location.href) || !suppressed) { toggle?.remove(); toggle = undefined; } else { ensureToggle(); toggle!.hidden = false; }
@@ -217,7 +222,7 @@ async function start() {
       const stale = page.kind === 'home' && homeMode === 'following' ? new Set(homeController.staleCards(roots)) : new Set<Element>();
       const flagged = new Set<Element>();
       for (const root of roots) for (const card of root.querySelectorAll('shreddit-post, .thing.link')) {
-        if (isAdvertisement(card) || page.kind === 'home' && (homeFeed?.status !== 'ready' || stale.has(card) || homeMode === 'following' && isRecommendation(card))) flagged.add(card);
+        if (nativeAds.has(card) || isAdvertisement(card) || page.kind === 'home' && (homeFeed?.status !== 'ready' || stale.has(card) || homeMode === 'following' && isRecommendation(card))) flagged.add(card);
       }
       for (const card of filteredNative) if (!flagged.has(card)) card.removeAttribute('data-pureddit-filtered');
       for (const card of flagged) if (!card.hasAttribute('data-pureddit-filtered')) card.setAttribute('data-pureddit-filtered','');
@@ -241,7 +246,7 @@ async function start() {
     const unchanged = new Set([...currentCards].filter(([node,value]) => routeCards.get(node) === value).map(([node]) => node));
     if (page.kind === 'home' && homeMode === 'following') for (const node of homeController.staleCards(roots)) unchanged.add(node);
     lastCards = currentCards;
-    const options = { cache: parsedPosts, excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
+    const options = { advertisements:nativeAds, cache: parsedPosts, excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
     for (const root of roots) if (root instanceof ShadowRoot) {
       const extra = extractPosts(root, location.href, options); extracted.posts.push(...extra.posts); extracted.filtered += extra.filtered; extracted.excluded.push(...extra.excluded);
@@ -287,9 +292,9 @@ async function start() {
         const card = ancestor.closest('shreddit-post, .thing.link'); if (card) { parsedPosts.delete(card); touchedCard = true; }
         const owner = ancestor.getRootNode(); ancestor = owner instanceof ShadowRoot ? owner.host : null;
       }
-      if (record.type === 'characterData') { if (!liveNative && touchedCard || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
+      if (record.type === 'characterData') { if (!liveNative && touchedCard || target && isAdDisclosureMutation(target) || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
       else if (record.type === 'attributes') {
-        if (liveNative && touchedCard && !['class', 'hidden', 'slot', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'is-recommended', 'data-recommended', 'recommendation-reason', 'data-testid'].includes(record.attributeName || '')) continue;
+        if (liveNative && touchedCard && !['class', 'hidden', 'slot', 'href', 'aria-label', 'data-ad-click-location', 'data-ad-click-action', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'is-recommended', 'data-recommended', 'recommendation-reason', 'data-testid'].includes(record.attributeName || '')) continue;
         if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
       } else {
         const owner = record.target.getRootNode();
@@ -301,7 +306,7 @@ async function start() {
     if (added.size) registry?.addAll(added);
     if (relevant) schedule();
   });
-  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'aria-label', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
+  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'data-ad-click-location', 'data-ad-click-action', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'aria-label', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation); observing = true;
   window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   document.addEventListener('click', event => {
