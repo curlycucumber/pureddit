@@ -3,10 +3,11 @@ import { mountReader } from '../shared/reader';
 import { DEFAULTS, HOME_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
 import { AD_SELECTOR } from '../shared/feed';
 import { HomeFeedController, nativeControl, nativeRoots } from './native';
+import { nativeAppearance, nativePage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
 declare const __PUREDDIT_THEME__: string;
 
-// Only inspect feed pages the user opens. No fetch/XHR, credentials, API calls,
+// Read feeds and style Reddit's native interactive pages. No fetch/XHR, credentials, API calls,
 // history interception, or writes to Reddit are used by this extension.
 async function start() {
   if (window.top !== window || location.protocol !== 'https:' || !['www.reddit.com', 'reddit.com', 'old.reddit.com', 'new.reddit.com'].includes(location.hostname)) return;
@@ -19,6 +20,12 @@ async function start() {
   let overflow: string | undefined;
   let homeMode: HomeMode = 'following'; let homeFeed: HomeFeed | undefined;
   const homeController = new HomeFeedController();
+  const nativeSkin = nativeAppearance(); let rendered = ''; let skinKey = '';
+  function skin(enabled: boolean) {
+    const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}` : '';
+    if (key === skinKey) return; skinKey = key;
+    if (enabled) nativeSkin.update(preferences, next => { void save(next); }); else nativeSkin.clear();
+  }
   const nativeStyles = new Map<ShadowRoot, HTMLStyleElement>();
   const observed = new WeakSet<ShadowRoot>();
   let cacheKey = ''; const postCache = new Map<string, Post>();
@@ -46,7 +53,7 @@ async function start() {
     preferences = normalizePreferences(next); refresh();
     try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
   }
-  function showOriginal() { suppressed = true; restore(); if (host) { host.hidden = true; host.style.display = 'none'; } if (toggle) toggle.hidden = false; }
+  function showOriginal() { suppressed = true; restore(); skin(true); if (host) { host.hidden = true; host.style.display = 'none'; } if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
     const control = nativeControl(action);
     showOriginal();
@@ -98,23 +105,24 @@ async function start() {
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
     const roots = preferences.enabled && page ? nativeRoots() : [];
+    skin(preferences.enabled && (Boolean(page) && suppressed || nativePage(location.href)));
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page), roots);
     if (!preferences.enabled || !page) {
-      restore(); host?.remove(); toggle?.remove(); host = undefined; toggle = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); return;
+      restore(); host?.remove(); toggle?.remove(); host = undefined; toggle = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); rendered = ''; return;
     }
     if (page.community && page.community.toLowerCase() !== 'popular' && lastVisit !== page.community.toLowerCase()) {
       lastVisit = page.community.toLowerCase(); const next = visit(preferences, page.community);
       preferences = next; void savePreferences(next).catch(() => { storageError = true; });
     }
     if (host && !host.isConnected) { restore(); toggle?.remove(); host = undefined; ui = undefined; }
-    if (!host) create();
+    if (!host) { create(); rendered = ''; }
     if (suppressed) { if (host) { host.hidden = true; host.style.display = 'none'; } if (toggle) toggle.hidden = false; return; }
     host!.hidden = false; host!.style.display = 'block'; toggle!.hidden = true;
     homeFeed = page.kind === 'home' ? homeController.select(homeMode, restore, roots) : undefined;
     if (overflow === undefined) { overflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
     for (const child of document.body.children) {
-      if (!(child instanceof HTMLElement) || child === host || child === toggle || ['SCRIPT', 'STYLE', 'LINK'].includes(child.tagName)) continue;
+      if (!(child instanceof HTMLElement) || child.id === 'pureddit-native-controls' || child === host || child === toggle || ['SCRIPT', 'STYLE', 'LINK'].includes(child.tagName)) continue;
       if (!originals.has(child)) { originals.set(child, { inert: child.inert, hidden: child.getAttribute('aria-hidden') }); child.inert = true; child.setAttribute('aria-hidden', 'true'); }
     }
     const options = { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
@@ -131,12 +139,13 @@ async function start() {
     for (const post of extracted.posts) postCache.set(post.href, post);
     while (postCache.size > 500) postCache.delete(postCache.keys().next().value!);
     extracted.posts = [...postCache.values()];
-    ui!.update({ ...extracted, page, preferences, preview: false, homeFeed });
+    const signature = JSON.stringify([extracted, page, preferences, homeFeed]);
+    if (signature !== rendered) { rendered = signature; ui!.update({ ...extracted, page, preferences, preview: false, homeFeed }); }
     if (storageError) ui!.message('Browser preferences could not be saved. The reading view still works in this tab.');
   }
   const schedule = () => { if (!timer) timer = window.setTimeout(() => { timer = 0; refresh(); }, 120); };
   const observer = new MutationObserver(schedule);
-  const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
+  const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.body, observation);
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
@@ -156,7 +165,7 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); restore(); adFiltering(false); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();

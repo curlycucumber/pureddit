@@ -241,3 +241,55 @@ test('modern post actions share and copy real links, handle clipboard denial, an
   await expect(page).toHaveURL(href);await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'Native Reddit control'})).toBeVisible();
 });
+
+test('native discussion, profile, notifications and composer retain appearance with working Reddit controls', async({context,page})=>{
+  await harness(context);
+  for (const path of ['/r/news/comments/abc123/discussion/','/user/reader/','/notifications','/submit','/r/news/submit/']) {
+    await page.goto(`https://www.reddit.com${path}`);await inject(page);
+    const controls=page.locator('#pureddit-native-controls');await expect(controls).toBeVisible();
+    await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
+    await controls.getByRole('button',{name:'Dark mode',exact:true}).click();
+    await expect(page.locator('body')).toHaveCSS('background-color','rgb(16, 18, 20)');
+    await controls.getByRole('button',{name:'Old layout',exact:true}).click();
+    await expect(page.locator('html')).toHaveAttribute('data-pureddit-native','old');
+    await page.evaluate(()=>{document.getElementById('native-action')!.addEventListener('click',()=>document.body.dataset.clicked='yes');});
+    await page.getByRole('button',{name:'Native Reddit control',exact:true}).click();
+    expect(await page.locator('body').getAttribute('data-clicked')).toBe('yes');
+    expect(await page.locator('#native').evaluate(node=>(node as HTMLElement).inert)).toBe(false);
+  }
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').uncheck();
+  await expect(page.locator('#pureddit-native-appearance')).toHaveCount(0);await expect(page.locator('#pureddit-native-controls')).toHaveCount(0);
+});
+
+test('unrelated native page mutations preserve existing feed cards and focused controls', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  await reader.getByRole('article').first().evaluate(node=>(node as HTMLElement).dataset.identity='preserved');
+  await page.locator('#native').evaluate(node=>{node.classList.add('hover-state');node.append(document.createElement('span'));});
+  await page.waitForTimeout(400);
+  await expect(reader.getByRole('article').first()).toHaveAttribute('data-identity','preserved');
+});
+
+test('Home recognizes selection on wrapper tabs outside navigation and in-place card updates', async({context,page})=>{
+  const custom=`<!doctype html><html><body><div><div data-selected="false" id="following"><button>Following</button></div><div data-selected="true" id="suggested"><button>For You</button></div></div><shreddit-post is-recommended="true" post-title="A native story" subreddit-name="news" permalink="/r/news/comments/home1/title/"></shreddit-post><script>document.querySelector('#following button').onclick=()=>{document.querySelector('#following').dataset.selected='true';document.querySelector('#suggested').dataset.selected='false';document.querySelector('shreddit-post').removeAttribute('is-recommended');};</script></body></html>`;
+  await harness(context,custom);await page.goto('https://www.reddit.com/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);await expect(reader.getByText('A native story',{exact:true})).toBeVisible();
+});
+
+test('Home excludes retained hidden feed panels after a native tab switch', async({context,page})=>{
+  const retained=`<!doctype html><html><body><div role="tablist"><button role="tab" aria-selected="false" id="following">Following</button><button role="tab" aria-selected="true" id="for-you">For You</button></div><div id="followed" hidden><shreddit-post post-title="Only followed content" subreddit-name="news" permalink="/r/news/comments/follow1/title/"></shreddit-post></div><div id="suggestions"><shreddit-post post-title="Retained For You card" subreddit-name="books" permalink="/r/books/comments/extra1/title/"></shreddit-post></div><script>document.querySelector('#following').onclick=()=>{setTimeout(()=>{document.querySelector('#following').setAttribute('aria-selected','true');document.querySelector('#for-you').setAttribute('aria-selected','false');document.querySelector('#followed').hidden=false;document.querySelector('#suggestions').hidden=true;},100);};</script></body></html>`;
+  await harness(context,retained);await page.goto('https://www.reddit.com/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  await expect(reader.getByText('Only followed content',{exact:true})).toBeVisible();await expect(reader.getByText('Retained For You card',{exact:true})).toHaveCount(0);
+});
+
+
+test('Home recognizes Reddit faceplate selection markers without ARIA selection', async({context,page})=>{
+  const faceplate=homeFixture.replace(/ aria-selected="(?:true|false)"/g,'').replace("button.setAttribute('aria-selected',String(button.dataset.nativeMode===mode))", "(button.toggleAttribute('faceplate-tab-selected',button.dataset.nativeMode===mode),button.classList.toggle('tab-selected',button.dataset.nativeMode===mode))");
+  await harness(context,faceplate);await page.goto('https://www.reddit.com/');await inject(page);
+  const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  await expect(page.locator('[data-native-mode="following"]')).toHaveAttribute('faceplate-tab-selected','');
+  await expect(reader.getByText('A followed community post',{exact:true})).toBeVisible();
+  await reader.getByRole('tab',{name:'For You',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(3);
+  await reader.getByRole('tab',{name:'Following',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(1);
+});

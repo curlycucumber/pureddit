@@ -34,6 +34,7 @@ export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', 
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
   const posts: Post[] = []; const excluded: string[] = []; const seen = new Set<string>(); let filtered = 0;
   for (const element of modern.length ? modern : old) {
+    if (element.closest('[hidden]')) continue;
     const href = [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
       .map(value => postUrl(value || '')).find(Boolean);
     if (isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
