@@ -3,7 +3,7 @@ import { extractPosts } from '../shared/extract';
 import { communityUrl, DEFAULTS, HOME_URL, normalizePreferences, pageFromUrl, postUrl, visit, type HomeMode, type Post } from '../shared/model';
 import theme from '../shared/theme.css?inline';
 import { createFixture } from './fixtures';
-import { createDiscussionState, mountDiscussion, type DiscussionState } from './discussion';
+import { createDiscussionState, discussionCount, mountDiscussion, mountPostComposer, type DiscussionState } from './discussion';
 import discussionTheme from './discussion.css?inline';
 import './preview.css';
 
@@ -22,6 +22,9 @@ let homeMode: HomeMode = 'following';
 let feedUrl = 'https://www.reddit.com/r/popular/';
 let activePost: Post | undefined;
 let discussion: ReturnType<typeof mountDiscussion> | undefined;
+let postComposer: ReturnType<typeof mountPostComposer> | undefined;
+let nextPostId = 1;
+const ownPosts: Post[] = [];
 let lastRoute: string | undefined;
 const sessions = new Map<string, DiscussionState>();
 const catalog = extractPosts(createFixture('modern', 'popular'), location.href).posts;
@@ -35,7 +38,7 @@ const reader = mountReader(shadow, theme + discussionTheme, {
   preview: true,
   more() { reader.message('The installed extension asks Reddit’s native feed to load more posts. This preview has sample content only.'); },
   homeMode(value) { homeMode = value; updateRoute(activePost); },
-  native(action) { const notice = document.querySelector<HTMLElement>('.preview-message')!; notice.hidden = false; notice.textContent = `In the installed extension, this opens Reddit’s native ${action === 'create' ? 'post composer' : action === 'navigation' ? 'navigation and subscriptions' : action === 'account' ? 'account menu' : 'notifications'}. This preview does not connect to a Reddit account.`; },
+  native(action) { if (action === 'create') { updateRoute(undefined, false, true); return; } const notice = document.querySelector<HTMLElement>('.preview-message')!; notice.hidden = false; notice.textContent = `In the installed extension, this opens Reddit’s native ${action === 'navigation' ? 'navigation and subscriptions' : action === 'account' ? 'account menu' : 'notifications'}. This preview does not connect to a Reddit account.`; },
   appearance(value) { preferences = { ...preferences, appearance: value }; persist(); render(); },
   colorScheme(value) { preferences = { ...preferences, colorScheme: value }; persist(); render(); },
   original() { const notice = document.querySelector<HTMLElement>('.preview-message')!; notice.hidden = false; notice.textContent = 'In the installed extension, Show Reddit restores the original page and native account controls. This preview contains illustrative fixtures only.'; },
@@ -43,12 +46,14 @@ const reader = mountReader(shadow, theme + discussionTheme, {
   pin(name) { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) { preferences = { ...preferences, pins: [...preferences.pins, name] }; persist(); render(); } },
   unpin(name) { preferences = { ...preferences, pins: preferences.pins.filter(item => item !== name) }; persist(); render(); },
 });
-function previewUrl(post?: Post) {
+function previewUrl(post?: Post, compose = false) {
   const params = new URLSearchParams({ feed: feedUrl, mode: homeMode }); if (post) params.set('post', post.id);
+  if (compose) params.set('compose', '1');
   return `${location.pathname}${location.search}#${params}`;
 }
-function updateRoute(post?: Post, replace = false) {
-  history[replace ? 'replaceState' : 'pushState']({ puredditPreview: true, discussion: Boolean(post) }, '', previewUrl(post));
+function updateRoute(post?: Post, replace = false, compose = false) {
+  const backToFeed = shadow.querySelector<HTMLElement>('.reader')?.dataset.view === 'feed' || Boolean(replace && history.state?.compose && history.state.backToFeed);
+  history[replace ? 'replaceState' : 'pushState']({ puredditPreview: true, discussion: Boolean(post), compose, backToFeed }, '', previewUrl(post, compose));
   readRoute();
 }
 function navigate(url: string) {
@@ -74,24 +79,37 @@ function readRoute() {
   feedUrl = pageFromUrl(requestedFeed) ? requestedFeed : 'https://www.reddit.com/r/popular/';
   homeMode = params.get('mode') === 'for-you' ? 'for-you' : 'following';
   const nextPost = catalog.find(post => post.id === params.get('post'));
+  const composing = params.get('compose') === '1';
   const main = shadow.querySelector<HTMLElement>('main')!, layout = shadow.querySelector<HTMLElement>('.layout')!;
-  if (!activePost && nextPost && previousFeedUrl === feedUrl) savedScroll.set(feedUrl, { main: main.scrollTop, layout: layout.scrollTop });
+  if (shadow.querySelector<HTMLElement>('.reader')?.dataset.view === 'feed' && (nextPost || composing) && previousFeedUrl === feedUrl) savedScroll.set(feedUrl, { main: main.scrollTop, layout: layout.scrollTop });
   const priorPost = activePost;
+  const wasComposing = Boolean(postComposer);
   activePost = nextPost;
   discussion?.element.remove(); discussion = undefined;
-  shadow.querySelector<HTMLElement>('.reader')!.dataset.view = nextPost ? 'discussion' : 'feed';
+  postComposer?.element.remove(); postComposer = undefined;
+  shadow.querySelector<HTMLElement>('.reader')!.dataset.view = composing ? 'compose' : nextPost ? 'discussion' : 'feed';
   render();
-  if (nextPost) {
+  if (composing) {
+    const communities = [...new Set(catalog.map(post => post.community))];
+    const initial = communities.find(name => name.toLowerCase() === page.community?.toLowerCase()) || communities[0];
+    postComposer = mountPostComposer(communities, initial, data => {
+      const id = nextPostId++;
+      const post: Post = { id: `local-post-${id}`, title: data.title, community: data.community, author: 'preview_you', score: '1', comments: '0', href: `https://www.reddit.com/r/${data.community}/comments/local${id}/preview/` };
+      const state = createDiscussionState(); state.comments = []; state.postBody = data.body;
+      catalog.push(post); ownPosts.unshift(post); sessions.set(post.href, state); updateRoute(post, true);
+    }, () => { if (history.state?.puredditPreview) history.back(); else updateRoute(undefined, true); });
+    main.append(postComposer.element); main.scrollTop = 0; layout.scrollTop = 0; postComposer.focus();
+  } else if (nextPost) {
     let state = sessions.get(nextPost.href); if (!state) { state = createDiscussionState(); sessions.set(nextPost.href, state); }
     discussion = mountDiscussion(nextPost, state, {
       back() {
-        if (history.state?.puredditPreview && history.state.discussion) history.back();
+        if (history.state?.puredditPreview && history.state.discussion && history.state.backToFeed) history.back();
         else updateRoute(undefined, true);
       },
       navigate,
     });
     main.append(discussion.element); main.scrollTop = 0; layout.scrollTop = 0; discussion.focusTitle();
-  } else if (priorPost) {
+  } else if (priorPost || wasComposing) {
     const scroll = savedScroll.get(feedUrl); main.scrollTop = scroll?.main || 0; layout.scrollTop = scroll?.layout || 0;
     shadow.querySelector<HTMLElement>('.post-title')?.focus({ preventScroll: true });
   } else { main.scrollTop = 0; layout.scrollTop = 0; }
@@ -100,7 +118,10 @@ function readRoute() {
 function render() {
   const fixture = createFixture(preferences.appearance, page.kind === 'home' && homeMode === 'following' ? 'home' : page.kind === 'home' ? 'popular' : page.community || 'popular');
   if (page.kind === 'home' && homeMode === 'following') [...fixture.children].slice(3).forEach(node => node.remove());
-  reader.update({ ...extractPosts(fixture, location.href, { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' }), page, preferences, preview: true, homeFeed: page.kind === 'home' ? { mode: homeMode, status: 'ready' } : undefined });
+  const extracted = extractPosts(fixture, location.href, { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' });
+  const local = ownPosts.filter(post => page.kind === 'home' || page.kind === 'popular' || post.community.toLowerCase() === page.community?.toLowerCase()).map(post => ({ ...post, comments: String(discussionCount(sessions.get(post.href)!)) }));
+  extracted.posts.unshift(...local);
+  reader.update({ ...extracted, page, preferences, preview: true, homeFeed: page.kind === 'home' ? { mode: homeMode, status: 'ready' } : undefined });
   document.querySelector('#address')!.textContent = activePost ? `reddit.com${new URL(activePost.href).pathname}` : page.kind === 'home' ? 'reddit.com' : communityUrl(page.community!).replace('https://www.', '').replace(/\/$/, '');
   // Default new-tab/copy-link actions should also point at the local preview.
   shadow.querySelectorAll<HTMLAnchorElement>('.posts a[href]').forEach(link => {

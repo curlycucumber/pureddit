@@ -75,3 +75,24 @@
   .comment-content { padding-left: 12px; }
   .discussion-actions { gap: 6px; }
 }
+.reader[data-view=compose] main > :not(.post-compose) { display:none!important; }
+.comment-content { position:relative; border-left:0; }
+.thread-rail { position:absolute; left:-7px; top:0; bottom:0; width:14px; border:0; background:transparent; padding:0; cursor:pointer; }
+.thread-rail::after { content:''; position:absolute; left:6px; top:0; bottom:0; width:1px; background:var(--thread-border); }
+.thread-rail:hover::after, .thread-rail:focus-visible::after { width:2px; background:var(--thread-link); }
+.comment-replies-flat > .discussion-comment > .comment-content > .thread-rail { display:none; }
+.discussion-vote[data-direction=down][aria-pressed=true] { color:#2455b5; background:#e8efff; }
+.reader[data-theme=dark] .discussion-vote[data-direction=down][aria-pressed=true] { color:#9bbcff; background:#202e4a; }
+.format-toolbar { display:flex; flex-wrap:wrap; gap:4px; padding-bottom:9px; margin-bottom:8px; border-bottom:1px solid var(--thread-border); }
+.format-toolbar button { border:0; border-radius:4px; padding:5px 8px; color:var(--thread-text); background:var(--thread-soft); font-size:11px; min-height:28px; }
+.format-toolbar button:hover, .format-toolbar button[aria-pressed=true] { color:var(--thread-link); box-shadow:inset 0 0 0 1px var(--thread-link); }
+.format-preview { padding:10px; border:1px solid var(--thread-border); margin-top:10px; border-radius:4px; font-size:13px; overflow-wrap:anywhere; }
+.comment-text p, .discussion-body p, .format-preview p { margin:5px 0; }
+.comment-text ul, .comment-text ol, .discussion-body ul, .discussion-body ol, .format-preview ul, .format-preview ol { margin:8px 0; padding-left:24px; }
+.discussion blockquote { border-left:3px solid var(--thread-border); margin:8px 0; padding-left:12px; color:var(--thread-muted); }
+.discussion code { background:var(--thread-soft); border-radius:3px; padding:1px 4px; font-size:.92em; }
+.post-field { display:flex; flex-direction:column; gap:6px; color:var(--thread-muted); font-size:12px; margin-bottom:15px; }
+.post-field input, .post-field select { width:100%; border:1px solid var(--thread-border); background:var(--thread-surface); color:var(--thread-text); padding:9px; border-radius:4px; font:inherit; }
+.post-field input:focus-visible { outline:2px solid var(--thread-link); outline-offset:2px; }
+.format-toolbar button[aria-label=Bold] { font-weight:700; }
+.format-toolbar button[aria-label=Italic] { font-style:italic; }
