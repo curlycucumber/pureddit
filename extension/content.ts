@@ -2,7 +2,7 @@ import { extractPosts } from '../shared/extract';
 import { mountReader } from '../shared/reader';
 import { DEFAULTS, HOME_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
 import { AD_SELECTOR } from '../shared/feed';
-import { HomeFeedController, nativeControl, nativeRoots } from './native';
+import { HomeFeedController, nativeControl, nativeRoots, nativeLink, cardSnapshot } from './native';
 import { nativeAppearance, nativePage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
 declare const __PUREDDIT_THEME__: string;
@@ -18,6 +18,10 @@ async function start() {
   let ui: ReturnType<typeof mountReader> | undefined;
   let loadingFallback = false; let emptySince = 0; let emptyTimer = 0;
   let departing = false; let suppressed = false; let lastVisit = ''; let lastUrl = ''; let timer = 0;
+  let rootsDirty = true; let cachedRoots: Array<Document | ShadowRoot> = [];
+  const rootsNow = () => { if (rootsDirty) { cachedRoots = nativeRoots(); rootsDirty = false; } return cachedRoots; };
+  let lastCards = new Map<Element,string>(); let routeCards = new Map<Element,string>();
+  let pendingUrl = '';
   let overflow: string | undefined;
   let homeMode: HomeMode = 'following'; let homeFeed: HomeFeed | undefined;
   const homeController = new HomeFeedController();
@@ -76,6 +80,24 @@ async function start() {
     if (url === HOME_URL) { homeMode = 'following'; homeController.reset(); }
     const next = pageFromUrl(url);
     if (next && ui) { ui.update({posts:[],filtered:0,excluded:[],layout:'unsupported',page:next,preferences,preview:false,homeFeed:next.kind==='home'?{mode:homeMode,status:'switching',message:'Opening Reddit Home…'}:undefined}); ui.message(`Opening ${next.title} on Reddit…`); }
+    let link = nativeLink(url, rootsNow());
+    let temporary = false;
+    if (!link && new URL(url).origin === location.origin) {
+      // Reddit's delegated router can also handle a community that is absent
+      // from its current sidebar. A normal browser navigation remains the fallback.
+      link = document.createElement('a'); link.href = url; link.hidden = true;
+      (document.querySelector('shreddit-app') || document.body).append(link); temporary = true;
+    }
+    routeCards = cardSnapshot(rootsNow()); pendingUrl = url;
+    restore();
+    if (!next && nativePage(url)) { nativeActive = true; showOriginal(); suppressed = false; }
+    const requested = pendingUrl;
+    window.setTimeout(() => { if (pendingUrl === requested && requested) { pendingUrl = ''; departing = false; refresh(); ui?.message('Reddit did not finish switching pages. Retry or use Show Reddit.'); } },10000);
+    if (link) {
+      link.click(); if (temporary) link.remove();
+      queueMicrotask(() => { rootsDirty = true; refresh(); });
+      return;
+    }
     departing = true;
     window.setTimeout(() => { if (departing) { departing = false; refresh(); ui?.message('Reddit is taking longer to open this page. You can retry the feed tab or use Show Reddit.'); } }, 10000);
     location.assign(url);
@@ -115,14 +137,14 @@ async function start() {
     toggle.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:2147483647;';
     const shadow = toggle.attachShadow({ mode: 'open' }); const button = document.createElement('button');
     button.textContent = 'pureddit · Reading view'; button.style.cssText = 'font:12px -apple-system,BlinkMacSystemFont,Arial,sans-serif;padding:12px 16px;border:1px solid #5f99cf;border-radius:6px;background:#cee3f8;color:#194b7c;cursor:pointer;box-shadow:0 2px 10px #0002;';
-    button.addEventListener('click', () => { suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
+    button.addEventListener('click', () => { pendingUrl = ''; departing = false; suppressed = false; refresh(); }); shadow.append(button); toggle.hidden = true; document.body.append(toggle);
   }
   function refresh() {
-    if (departing) return;
-    if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); }
+    if (departing || pendingUrl && location.href.replace(/\/$/, '') !== pendingUrl.replace(/\/$/, '')) return;
+    if (location.href !== lastUrl) { const lastUrlBeforeChange = lastUrl; lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset(); rootsDirty = true; routeCards = pageFromUrl(lastUrlBeforeChange) && pageFromUrl(location.href) ? (pendingUrl ? routeCards : lastCards) : new Map(); postCache.clear(); cacheKey = ''; rendered = ''; pendingUrl = ''; }
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
-    const roots = preferences.enabled && page ? nativeRoots() : [];
+    const roots = preferences.enabled && page ? rootsNow() : [];
     skin(preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page), roots);
@@ -146,7 +168,10 @@ async function start() {
       if (!(child instanceof HTMLElement) || child.id === 'pureddit-native-controls' || child === host || child === toggle || ['SCRIPT', 'STYLE', 'LINK'].includes(child.tagName)) continue;
       if (!originals.has(child)) { originals.set(child, { inert: child.inert, hidden: child.getAttribute('aria-hidden') }); child.inert = true; child.setAttribute('aria-hidden', 'true'); }
     }
-    const options = { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
+    const currentCards = cardSnapshot(roots);
+    const unchanged = new Set([...currentCards].filter(([node,value]) => routeCards.get(node) === value).map(([node]) => node));
+    lastCards = currentCards;
+    const options = { excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
     for (const root of roots) if (root instanceof ShadowRoot) {
       const extra = extractPosts(root, location.href, options); extracted.posts.push(...extra.posts); extracted.filtered += extra.filtered; extracted.excluded.push(...extra.excluded);
@@ -173,21 +198,37 @@ async function start() {
     if (storageError) ui!.message('Browser preferences could not be saved. The reading view still works in this tab.');
   }
   const schedule = () => { if (!timer) timer = window.setTimeout(() => { timer = 0; refresh(); }, 120); };
-  const observer = new MutationObserver(schedule);
+  const observer = new MutationObserver(records => {
+    let relevant = false;
+    for (const record of records) {
+      const target = record.target instanceof Element ? record.target : record.target.parentElement;
+      if (target?.closest('#pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) continue;
+      if (record.type === 'attributes') {
+        if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
+      } else {
+        const owner = record.target.getRootNode();
+        if (owner instanceof ShadowRoot && nativeStyles.has(owner) && !nativeStyles.get(owner)!.isConnected) relevant = true;
+        if (target?.closest('shreddit-post, .thing.link, [role=tablist]')) relevant = true;
+        for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { rootsDirty = true; relevant = true; }
+      }
+    }
+    if (relevant) schedule();
+  });
   const observation: MutationObserverInit = { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation);
-  window.addEventListener('pageshow', () => { departing = false; suppressed = false; refresh(); });
+  window.addEventListener('pageshow', () => { pendingUrl = ''; departing = false; suppressed = false; refresh(); });
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   const poll = window.setInterval(() => {
-    if (location.href !== lastUrl) { lastUrl = location.href; suppressed = false; homeController.reset(); schedule(); }
+    if (location.href !== lastUrl) { rootsDirty = true; schedule(); }
     else if (!suppressed && homeFeed?.status === 'switching') schedule();
     else if (preferences.enabled && pageFromUrl(location.href) && Date.now() - lastRootScan >= 1500) {
       lastRootScan = Date.now();
       // Attaching a shadow root does not generate a light-DOM mutation.
-      if (nativeRoots().some(root => root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) schedule();
+      const discovered = nativeRoots();
+      if (discovered.some(root => !cachedRoots.includes(root) || root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) { cachedRoots = discovered; rootsDirty = false; schedule(); }
     }
-  }, 750);
+  }, 250);
   extensionApi()?.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes[KEY]) {
       const next = normalizePreferences(changes[KEY].newValue);

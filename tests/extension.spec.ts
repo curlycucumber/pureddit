@@ -363,3 +363,47 @@ test('a stalled native feed exposes its real retry controls beneath Pureddit and
   await expect(page.locator('#pureddit-extension-root').getByRole('link',{name:'Native loading recovered',exact:true})).toBeVisible();
   await expect(shell).toHaveCount(0);
 });
+
+test('feed and post links use the native router without another document request or stale feed cards', async({context,page})=>{
+  await harness(context,homeFixture);await page.goto('https://www.reddit.com/');
+  await page.evaluate(()=>{
+    const nav=document.createElement('nav');nav.id='router-links';
+    for(const [name,path] of [['Home','/'],['Popular','/r/popular/'],['News','/r/news/'],['Post','/r/news/comments/soft1/title/']]) {
+      const a=document.createElement('a');a.href=path;a.textContent=name;
+      a.onclick=event=>{event.preventDefault();history.pushState({},'',path);document.body.dataset.router=name;
+        if(name==='Post'){document.querySelector('#native-feed')!.setAttribute('hidden','');const section=document.createElement('main');section.className='theme-light';section.innerHTML='<h1>A real native discussion</h1><textarea aria-label="Reddit editor"></textarea>';document.body.append(section);return;}
+        setTimeout(()=>{document.querySelector('#native-feed')!.removeAttribute('hidden');if(name==='Home')(window as any).render('for-you');else document.querySelector('#native-feed')!.innerHTML=`<shreddit-post post-title="${name} native story" subreddit-name="${name.toLowerCase()}" permalink="/r/${name.toLowerCase()}/comments/soft1/title/"></shreddit-post>`;},200);
+      };nav.append(a);
+    }document.body.prepend(nav);
+    const news=[...nav.querySelectorAll('a')].find(a=>a.textContent==='News')!;news.remove();
+    document.addEventListener('click',event=>{const link=(event.target as Element).closest?.('a');if(link?.getAttribute('href')==='https://www.reddit.com/r/news/'&&news.onclick)news.onclick.call(link,event as PointerEvent);});
+  });
+  await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await reader.getByRole('button',{name:'Dark mode',exact:true}).click();
+  await reader.locator('.reader').evaluate(node=>node.setAttribute('data-same-reader','yes'));
+  const documents:string[]=[];page.on('request',request=>{if(request.isNavigationRequest())documents.push(request.url());});
+  for(const name of ['Popular','News','Home','News']) {
+    await reader.locator('.primary').getByRole('link',{name,exact:true}).click();
+    await expect(page.locator('body')).toHaveAttribute('data-router',name);
+    await expect(reader.getByRole('article')).toHaveCount(1);
+    await expect(reader.getByRole('link',{name:name==='Home'?'A followed community post':`${name} native story`,exact:true})).toBeVisible();
+    await expect(reader.locator('.reader')).toHaveAttribute('data-same-reader','yes');
+  }
+  await reader.getByRole('link',{name:'News native story',exact:true}).click();
+  const shell=page.locator('#pureddit-native-controls');await expect(shell.getByRole('link',{name:'pureddit home',exact:true})).toBeVisible();
+  await page.getByLabel('Reddit editor').fill('Still using the real Reddit editor');
+  await expect(page.locator('main.theme-light')).toHaveCSS('background-color','rgb(16, 18, 20)');
+  await expect(page.locator('main.theme-light h1')).toHaveCSS('font-size','27px');
+  expect(documents).toEqual([]);
+});
+
+test('navigation hover mutations do not repeatedly extract the feed', async({context,page})=>{
+  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);await page.waitForTimeout(250);
+  await page.evaluate(()=>{
+    (window as any).feedScans=0;const original=document.querySelectorAll.bind(document);
+    document.querySelectorAll=((selector:string)=>{if(selector==='shreddit-post')(window as any).feedScans++;return original(selector);}) as typeof document.querySelectorAll;
+    const nav=document.getElementById('native-action')!;for(let i=0;i<100;i++)nav.classList.toggle('hovered');
+  });
+  await page.waitForTimeout(400);expect(await page.evaluate(()=>(window as any).feedScans)).toBe(0);
+});

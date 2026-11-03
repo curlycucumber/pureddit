@@ -112,3 +112,20 @@ export function nativeControl(action: NativeAction): HTMLElement | undefined {
     if (named) return named;
   }
 }
+
+// Let Reddit's router handle its own links instead of reloading its application.
+export function nativeLink(destination: string, roots = nativeRoots()): HTMLAnchorElement | undefined {
+  const key = (url: URL) => `${url.origin}${url.pathname.replace(/\/$/, '')}${url.search}`;
+  const target = key(new URL(destination));
+  for (const root of roots) for (const link of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+    if (link.target && link.target !== '_self' || link.hasAttribute('download')) continue;
+    try { if (key(new URL(link.href)) === target) return link; } catch { /* Invalid native links stay untouched. */ }
+  }
+}
+export function cardSnapshot(roots: Array<Document | ShadowRoot>) {
+  const cards = new Map<Element,string>();
+  for (const root of roots) for (const post of root.querySelectorAll('shreddit-post, .thing.link')) {
+    cards.set(post,[post.getAttribute('permalink'),post.getAttribute('data-permalink'),post.getAttribute('post-title'),post.querySelector('a.title, [slot=title]')?.textContent].join('\n'));
+  }
+  return cards;
+}

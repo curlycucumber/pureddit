@@ -28,13 +28,13 @@ function createdAt(element: Element) {
   const date = new Date(numeric === undefined ? raw : numeric < 1e12 ? numeric * 1000 : numeric);
   if (Number.isFinite(date.getTime())) return date.toISOString();
 }
-export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean } = {}): Extraction {
+export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element> } = {}): Extraction {
   const modern = [...root.querySelectorAll('shreddit-post')];
   const old = [...root.querySelectorAll('.thing.link')];
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
   const posts: Post[] = []; const excluded: string[] = []; const seen = new Set<string>(); let filtered = 0;
   for (const element of modern.length ? modern : old) {
-    if (element.closest('[hidden]')) continue;
+    if (options.excludeElements?.has(element) || element.closest('[hidden]')) continue;
     const href = [element.getAttribute('permalink'), element.getAttribute('data-permalink'), element.querySelector('a.comments, a[slot="full-post-link"], a[href*="/comments/"]')?.getAttribute('href'), element.getAttribute('content-href')]
       .map(value => postUrl(value || '')).find(Boolean);
     if (isAdvertisement(element) || (!options.includeRecommendations && isRecommendation(element))) { filtered++; if (href) excluded.push(href); continue; }
