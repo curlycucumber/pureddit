@@ -1,4 +1,4 @@
-import { communityUrl, COMMUNITY, HOME_URL, sortUrl, VERSION, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
+import { communityUrl, COMMUNITY, HOME_URL, NEWS_URL, sortUrl, VERSION, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
 import type { Extraction } from './extract';
 
 export type ReaderModel = Extraction & { page: Page; preferences: Preferences; preview: boolean; homeFeed?: HomeFeed };
@@ -116,7 +116,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       reader.dataset.theme = preferences.colorScheme;
       reader.querySelectorAll<HTMLButtonElement>('[data-appearance]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.appearance === preferences.appearance)));
       reader.querySelectorAll<HTMLButtonElement>('[data-color-scheme]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.colorScheme === preferences.colorScheme)));
-      find<HTMLElement>('.sorts').hidden = page.kind === 'home';
+      find<HTMLElement>('.sorts').hidden = page.kind === 'home' || page.kind === 'news';
       const primary = find('.primary'), sorts = find('.sorts');
       const feedLocation = find(preferences.appearance === 'old' ? '.classic-navigation' : '.sidebar');
       const sortLocation = find(preferences.appearance === 'old' ? '.classic-navigation' : '.toolbar');
@@ -146,7 +146,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       if (navigation !== lastNavigation) {
       lastNavigation = navigation;
       primary.replaceChildren();
-      for (const [label, href, kind] of [['Home', HOME_URL, 'home'], ['Popular', 'https://www.reddit.com/r/popular/', 'popular'], ['News', 'https://www.reddit.com/r/news/', 'news']]) {
+      for (const [label, href, kind] of [['Home', HOME_URL, 'home'], ['Popular', 'https://www.reddit.com/r/popular/', 'popular'], ['News', NEWS_URL, 'news']]) {
         const link = anchor(label, href, actions, page.kind === kind ? 'active' : ''); if (page.kind === kind) link.setAttribute('aria-current', 'page'); primary.append(link);
       }
       const recent = find('.recent'); recent.replaceChildren();

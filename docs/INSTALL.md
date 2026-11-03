@@ -7,7 +7,7 @@ These are unsigned **development packages**, not published store releases. Keep 
 1. Download `pureddit-chrome.zip` from the Vercel preview, or run `npm ci && npm run build`.
 2. Extract the ZIP into a permanent folder. The selected folder must directly contain `manifest.json`.
 3. Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select that folder (or `dist/extensions/chrome`).
-4. Open `https://www.reddit.com/r/popular/`, `https://www.reddit.com/r/news/`, or `https://www.reddit.com/` and allow access to Reddit if requested.
+4. Open `https://www.reddit.com/r/popular/`, `https://www.reddit.com/news`, or `https://www.reddit.com/` and allow access to Reddit if requested.
 5. Use the toolbar popup to enable/disable the reader. Refresh existing Reddit tabs after installing/updating. Do not grant access to unrelated websites.
 
 Managed Chrome installations can prohibit unpacked extensions. That is an administrator restriction; use an authorized personal/development browser or an approved published distribution rather than changing managed policy.
@@ -93,9 +93,9 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.3.10
+### Updating Chrome to 0.3.11
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.10** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.3.11** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
 
@@ -114,3 +114,5 @@ Version 0.3.9 changes current-site Modern feeds to native Reddit content with Pu
 Test autoplay with your Reddit profile setting both enabled and disabled, media controls, galleries, sensitive-content gates, scrolling/infinite loading, and native voting/commenting. Confirm Your Feed remains default and ads/marked recommendations stay hidden. Switch Modern → Old → Modern and verify settings and native controls survive. The Vercel image preview is illustrative and does not connect to Reddit settings or play real Reddit videos.
 
 Version 0.3.10 reduces native Modern metadata-update scanning, deduplicates nested root discovery, and disconnects/relinquishes caches while disabled. Re-enabling rebuilds fresh state. Native media and autoplay decisions remain with Reddit.
+
+Version 0.3.11 consolidates current-site navigation: one compact Pureddit appearance bar above Reddit’s native header/sidebar. Native Following/For You buttons are renamed Your Feed/Suggested Feed while their handlers remain intact. Pureddit locally overrides light/dark colors in the document and open native shadow components, without changing Reddit profile preferences. Old discussions use compact classic typography, squared controls and smaller previews. News now targets `https://www.reddit.com/news`; `/r/news` remains a community. Check local Light mode while your Reddit profile uses Dark, switching native tabs, native Home after Suggested Feed, News routing, reply drafts across layout changes, and disabling to restore original labels/styles.

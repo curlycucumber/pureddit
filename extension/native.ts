@@ -21,8 +21,8 @@ function selected(element: Element) {
   if (['aria-selected', 'aria-pressed', 'data-selected', 'data-active', 'selected', 'active'].some(name => element.getAttribute(name) === 'false')) return false;
   return element.hasAttribute('faceplate-tab-selected') || (element.matches('[role=tab]') && element.classList.contains('tab-selected')) || element.getAttribute('aria-selected') === 'true' || element.getAttribute('aria-pressed') === 'true' || ['page', 'true'].includes(element.getAttribute('aria-current') || '') || ['active', 'selected'].includes(element.getAttribute('data-state') || '') || (element.hasAttribute('selected') && element.getAttribute('selected') !== 'false') || element.getAttribute('data-selected') === 'true' || element.getAttribute('data-active') === 'true' || (element.hasAttribute('active') && element.getAttribute('active') !== 'false') || element.matches('input:checked');
 }
-function feedControl(mode: HomeMode, roots: Array<Document | ShadowRoot>) {
-  const pattern = mode === 'following' ? /^following$/i : /^(for\s*you|suggested)$/i;
+export function feedControl(mode: HomeMode, roots: Array<Document | ShadowRoot>) {
+  const pattern = mode === 'following' ? /^(following|your feed)$/i : /^(for\s*you|suggested|suggested feed)$/i;
   const eligible = (element: HTMLElement) => {
     let ancestor: Element | null = element;
     while (ancestor) {
@@ -51,6 +51,9 @@ export class HomeFeedController {
   private previousCards: Map<Element, string> | undefined;
   private priorFeed = new Map<Element,string>();
   reset() { this.attempted = ''; this.pendingKey = ''; this.previousCards = undefined; this.priorFeed.clear(); }
+  expect(mode: HomeMode, roots: Array<Document | ShadowRoot>) {
+    this.pendingKey = `${location.href}:${mode}`;this.attempted=this.pendingKey;this.started=Date.now();this.previousCards=this.cards(roots);this.priorFeed=new Map(this.previousCards);
+  }
   staleCards(roots: Array<Document | ShadowRoot>) {
     for (const node of this.priorFeed.keys()) if (!node.isConnected) this.priorFeed.delete(node);
     if (!this.priorFeed.size) return [];
@@ -127,7 +130,7 @@ export function nativeLink(destination: string, roots = nativeRoots()): HTMLAnch
   const key = (url: URL) => `${url.origin}${url.pathname.replace(/\/$/, '')}${url.search}`;
   const target = key(new URL(destination));
   for (const root of roots) for (const link of root.querySelectorAll<HTMLAnchorElement>('a[href]')) {
-    if (link.target && link.target !== '_self' || link.hasAttribute('download')) continue;
+    if (link.hasAttribute('data-pureddit-news') || link.target && link.target !== '_self' || link.hasAttribute('download')) continue;
     try { if (key(new URL(link.href)) === target) return link; } catch { /* Invalid native links stay untouched. */ }
   }
 }

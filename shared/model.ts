@@ -3,11 +3,12 @@ export type ColorScheme = 'light' | 'dark';
 export type HomeMode = 'following' | 'for-you';
 export type NativeAction = 'create' | 'notifications' | 'account' | 'navigation';
 export type HomeFeed = { mode: HomeMode; status: 'ready' | 'switching' | 'unavailable'; message?: string };
+export const NEWS_URL = 'https://www.reddit.com/news';
 export const HOME_URL = 'https://www.reddit.com/';
 export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
 export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; mediaKind?: 'image' | 'video'; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
-export const VERSION = '0.3.10';
+export const VERSION = '0.3.11';
 export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [] };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 
@@ -30,15 +31,16 @@ export function visit(preferences: Preferences, name: string): Preferences {
 export function pageFromUrl(input: string): Page | null {
   let url: URL; try { url = new URL(input); } catch { return null; }
   if (!['www.reddit.com', 'reddit.com', 'old.reddit.com', 'new.reddit.com'].includes(url.hostname) || url.protocol !== 'https:') return null;
+  if (/^\/news\/?$/.test(url.pathname)) return {kind:'news',title:'News',sort:'hot'};
   const home = url.pathname.match(/^\/(new|hot|top|best)?\/?$/);
   if (home) return { kind: 'home', title: 'Home', sort: (home[1] || 'best') as Page['sort'] };
   const match = url.pathname.match(/^\/r\/([A-Za-z0-9_]{2,21})(?:\/(new|hot|top|best))?\/?$/);
   if (!match) return null;
   const name = match[1], sort = (match[2] || 'hot') as Page['sort'];
-  return { kind: name.toLowerCase() === 'popular' ? 'popular' : name.toLowerCase() === 'news' ? 'news' : 'community', title: name.toLowerCase() === 'popular' ? 'Popular' : `r/${name}`, community: name, sort };
+  return { kind: name.toLowerCase() === 'popular' ? 'popular' : 'community', title: name.toLowerCase() === 'popular' ? 'Popular' : `r/${name}`, community: name, sort };
 }
 export function communityUrl(name: string) { return `https://www.reddit.com/r/${encodeURIComponent(name)}/`; }
-export function sortUrl(page: Page, sort: string) { return `https://www.reddit.com/${page.kind === 'home' ? '' : `r/${page.community}/`}${sort}/`; }
+export function sortUrl(page: Page, sort: string) { if (page.kind === 'news') return NEWS_URL; return `https://www.reddit.com/${page.kind === 'home' ? '' : `r/${page.community}/`}${sort}/`; }
 export function postUrl(value: string): string | undefined {
   try {
     const url = new URL(value, 'https://www.reddit.com');

@@ -55,7 +55,7 @@ test('browser Back/Forward and community links navigate between discussions and 
   await expect(reader.locator('.reader')).toHaveAttribute('data-view', 'discussion');
   await expect(reader.getByRole('heading', { name: title, exact: true })).toBeVisible();
   await reader.getByRole('link', { name: 'News', exact: true }).click();
-  await expect(reader.getByRole('heading', { name: 'r/news', exact: true })).toBeVisible();
+  await expect(reader.getByRole('heading', { name: 'News', exact: true })).toBeVisible();
   await expect(reader.getByRole('article')).toHaveCount(1);
   await page.goBack();
   await expect(reader.locator('.reader')).toHaveAttribute('data-view', 'discussion');
@@ -74,7 +74,7 @@ test('returning through another community preserves the original feed scroll pos
   await post.click();
   await expect(reader.getByRole('heading', { name: title!, exact: true })).toBeVisible();
   await reader.getByRole('link', { name: 'News', exact: true }).click();
-  await expect(reader.getByRole('heading', { name: 'r/news', exact: true })).toBeVisible();
+  await expect(reader.getByRole('heading', { name: 'News', exact: true })).toBeVisible();
   await page.goBack();
   await expect(reader.locator('.reader')).toHaveAttribute('data-view', 'discussion');
   await reader.getByRole('button', { name: 'Back to feed', exact: true }).click();

@@ -1,7 +1,8 @@
+import { NativeTabs } from './native-tabs';
 import { RootRegistry } from './roots';
 import { extractPosts } from '../shared/extract';
 import { mountReader } from '../shared/reader';
-import { DEFAULTS, HOME_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
+import { DEFAULTS, HOME_URL, NEWS_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
 import { isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
 import { HomeFeedController, nativeControl, nativeLink, cardSnapshot } from './native';
 import { nativeAppearance, nativePage } from './native-appearance';
@@ -30,11 +31,12 @@ async function start() {
   function cancelNavigation() { clearTimeout(navigationTimer); navigationTimer = 0; pendingUrl = ''; departing = false; }
   let overflow: string | undefined;
   let homeMode: HomeMode = 'following'; let homeFeed: HomeFeed | undefined;
+  const nativeTabs = new NativeTabs();
   const homeController = new HomeFeedController();
   let nativeActive = false;
   const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void save({...preferences,colorScheme:value}); }, pin: () => {}, unpin: () => {}, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
   function skin(enabled: boolean) {
-    const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}` : '';
+    const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}:${Boolean(document.querySelector('shreddit-app'))}` : '';
     if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
     if (enabled) nativeSkin.update(preferences); else nativeSkin.clear();
   }
@@ -67,7 +69,7 @@ async function start() {
     preferences = normalizePreferences(next); refresh();
     try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
   }
-  function showOriginal(keepNavigation = false) { if (!keepNavigation) cancelNavigation(); loadingFallback = false; suppressed = true; restore(); skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
+  function showOriginal(keepNavigation = false) { if (!keepNavigation) cancelNavigation(); loadingFallback = false; suppressed = true; restore(); if (!nativeActive) { nativeTabs.clear(); clearNativeFilters(); } skin(nativeActive); if (host) { host.hidden = true; host.style.display = 'none'; } ensureToggle(); if (toggle) toggle.hidden = false; }
   function native(action: NativeAction) {
     cachedRoots = discovery().snapshot(); rootsDirty = false;
     const control = nativeControl(action, cachedRoots);
@@ -168,11 +170,14 @@ async function start() {
     }
     const page = pageFromUrl(location.href);
     if (page?.kind !== 'home') homeFeed = undefined;
-    const roots = preferences.enabled && page ? rootsNow() : [];
+    const roots = preferences.enabled && (page || nativePage(location.href)) ? rootsNow() : [];
     const liveModern = Boolean(preferences.enabled && page && preferences.appearance === 'modern' && document.querySelector('shreddit-app') && (!suppressed || nativeActive));
     liveNative = liveModern;
     if (liveModern) homeFeed = page!.kind === 'home' ? homeController.select(homeMode, restore, roots) : undefined;
     skin(liveModern || preferences.enabled && (Boolean(page) && suppressed && nativeActive || !page && nativePage(location.href) && !suppressed));
+    if (!preferences.enabled || !nativeSkin.connected()) nativeTabs.clear();
+    else { if (!liveModern || page?.kind !== 'home') nativeTabs.clearHome();if(document.querySelector('shreddit-app')) nativeTabs.news(roots); }
+    if (preferences.enabled && nativeSkin.connected()) nativeSkin.applyRoots(roots);
     if (!liveModern) nativeSkin.feed(null, undefined, () => {});
     if ([...observed].some(root => !root.host.isConnected)) { observer.disconnect(); observer.observe(document.documentElement, observation); observed = new Set(); }
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
@@ -187,6 +192,7 @@ async function start() {
       preferences = next; void savePreferences(next).catch(() => { storageError = true; });
     }
     if (liveModern) {
+      if (page.kind === 'home') nativeTabs.apply(roots);
       restore();
       if (host) { host.hidden = true; host.style.display = 'none'; }
       if (toggle) toggle.hidden = true;
@@ -251,6 +257,7 @@ async function start() {
     let relevant = false;
     const added = new Set<Element>();
     for (const record of records) {
+      if (nativeTabs.ownMutation(record)) continue;
       const target = record.target instanceof Element ? record.target : record.target.parentElement;
       if (target?.closest('#pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) continue;
       let touchedCard = false;
@@ -265,7 +272,7 @@ async function start() {
         if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
       } else {
         const owner = record.target.getRootNode();
-        if (owner instanceof ShadowRoot && nativeStyles.has(owner) && !nativeStyles.get(owner)!.isConnected) relevant = true;
+        if (owner instanceof ShadowRoot && (nativeStyles.has(owner) && !nativeStyles.get(owner)!.isConnected || nativeSkin.missingStyle(owner))) relevant = true;
         if (target?.closest('shreddit-post, .thing.link, [role=tablist]')) relevant = true;
         for (const node of [...record.addedNodes,...record.removedNodes]) if (node instanceof Element && !node.matches('style, script, #pureddit-extension-root, #pureddit-native-controls, #pureddit-return-toggle')) { if (node.isConnected) added.add(node); rootsDirty = true; relevant = true; }
       }
@@ -273,9 +280,18 @@ async function start() {
     if (added.size) registry?.addAll(added);
     if (relevant) schedule();
   });
-  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
+  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'aria-label', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation); observing = true;
   window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
+  document.addEventListener('click', event => {
+    if (event.ctrlKey || event.metaKey || event.shiftKey || event.button!==0) return;
+    if (preferences.enabled && nativeTabs.isNews(event.composedPath())) {event.preventDefault();event.stopImmediatePropagation();navigate(NEWS_URL);return;}
+    if (!liveNative || pageFromUrl(location.href)?.kind !== 'home') return;
+    const home=event.composedPath().find(node=>node instanceof HTMLAnchorElement && node.href===HOME_URL) as HTMLAnchorElement|undefined;
+    if(home && homeMode!=='following'){homeMode='following';homeController.reset();schedule();}
+    const mode=nativeTabs.mode(event.composedPath());
+    if (mode && mode!==homeMode) { homeController.expect(mode,rootsNow());homeMode=mode;schedule(); }
+  },true);
   window.addEventListener('popstate', () => { suppressed = false; schedule(); });
   let lastRootScan = 0;
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { rootsDirty = true; schedule(); } });
@@ -283,11 +299,11 @@ async function start() {
     if (document.hidden || !preferences.enabled) return;
     if (location.href !== lastUrl) { rootsDirty = true; schedule(); }
     else if (!suppressed && homeFeed?.status === 'switching') schedule();
-    else if (preferences.enabled && pageFromUrl(location.href) && Date.now() - lastRootScan >= 1500) {
+    else if (preferences.enabled && (pageFromUrl(location.href) || nativePage(location.href)) && Date.now() - lastRootScan >= 1500) {
       lastRootScan = Date.now();
       // Attaching a shadow root does not generate a light-DOM mutation.
       const discovered = discovery().snapshot();
-      if (discovered.some(root => !cachedRoots.includes(root) || root instanceof ShadowRoot && nativeStyles.get(root)?.parentNode !== root)) { cachedRoots = discovered; rootsDirty = false; schedule(); }
+      if (discovered.some(root => !cachedRoots.includes(root) || root instanceof ShadowRoot && (pageFromUrl(location.href) && nativeStyles.get(root)?.parentNode !== root || nativeSkin.missingStyle(root)))) { cachedRoots = discovered; rootsDirty = false; schedule(); }
     }
   }, 250);
   extensionApi()?.storage.onChanged.addListener((changes, area) => {
@@ -297,7 +313,7 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); cancelNavigation(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); cancelNavigation(); nativeTabs.clear(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();

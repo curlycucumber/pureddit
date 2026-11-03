@@ -118,13 +118,13 @@ function readRoute() {
   document.querySelector<HTMLElement>('.preview-message')!.hidden = true;
 }
 function render() {
-  const fixture = createFixture(preferences.appearance, page.kind === 'home' && homeMode === 'following' ? 'home' : page.kind === 'home' ? 'popular' : page.community || 'popular');
+  const fixture = createFixture(preferences.appearance, page.kind === 'home' && homeMode === 'following' ? 'home' : page.kind === 'home' ? 'popular' : page.kind === 'news' ? 'news' : page.community || 'popular');
   if (page.kind === 'home' && homeMode === 'following') [...fixture.children].slice(3).forEach(node => node.remove());
   const extracted = extractPosts(fixture, location.href, { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' });
   const local = ownPosts.filter(post => page.kind === 'home' || page.kind === 'popular' || post.community.toLowerCase() === page.community?.toLowerCase()).map(post => ({ ...post, comments: String(discussionCount(sessions.get(post.href)!)) }));
   extracted.posts.unshift(...local);
   reader.update({ ...extracted, page, preferences, preview: true, homeFeed: page.kind === 'home' ? { mode: homeMode, status: 'ready' } : undefined });
-  document.querySelector('#address')!.textContent = activePost ? `reddit.com${new URL(activePost.href).pathname}` : page.kind === 'home' ? 'reddit.com' : communityUrl(page.community!).replace('https://www.', '').replace(/\/$/, '');
+  document.querySelector('#address')!.textContent = activePost ? `reddit.com${new URL(activePost.href).pathname}` : page.kind === 'home' ? 'reddit.com' : page.kind === 'news' ? 'reddit.com/news' : communityUrl(page.community!).replace('https://www.', '').replace(/\/$/, '');
   // Default new-tab/copy-link actions should also point at the local preview.
   shadow.querySelectorAll<HTMLAnchorElement>('.posts a[href]').forEach(link => {
     const post = catalog.find(item => item.href === postUrl(link.href)); if (post) link.href = new URL(previewUrl(post), location.href).href;

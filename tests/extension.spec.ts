@@ -27,7 +27,7 @@ const inject = (page:Page)=>page.addScriptTag({path:'dist/extensions/chrome/cont
 
 test('built content harness reads native cards, updates dynamically, restores Reddit, and persists shortcuts', async({context,page})=>{
   await harness(context);const requests:string[]=[];page.on('request',request=>{if(request.url().includes('/api/'))requests.push(request.url());});
-  await page.goto('https://www.reddit.com/r/news/');await inject(page);const reader=page.locator('#pureddit-extension-root');
+  await page.goto('https://www.reddit.com/news');await inject(page);const reader=page.locator('#pureddit-extension-root');
   await expect(reader.getByRole('article')).toHaveCount(1);
   await expect(reader.getByRole('link',{name:'A post already loaded on Reddit',exact:true})).toBeVisible();
   expect(await page.locator('#native').evaluate(node=>(node as HTMLElement).inert)).toBe(true);
@@ -46,7 +46,7 @@ test('built content harness reads native cards, updates dynamically, restores Re
   expect(await page.locator('#native').evaluate(node=>(node as HTMLElement).inert)).toBe(false);
   await page.getByRole('button',{name:'pureddit · Reading view'}).click();await expect(reader.getByRole('article')).toHaveCount(2);
   await page.goto('https://www.reddit.com/r/news/comments/abc123/discussion/');await inject(page);await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
-  await page.evaluate(()=>history.pushState({},'', '/r/news/'));
+  await page.evaluate(()=>history.pushState({},'', '/news'));
   await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);
   expect(requests).toEqual([]);
 });
@@ -131,7 +131,7 @@ for(const community of ['popular','news']) test(`${community} is a native Reddit
 });
 
 test('Load more delegates to the native feed without a Pureddit API request', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>window.addEventListener('scroll',()=>{
     if(document.getElementById('native-more'))return;
     const post=document.createElement('shreddit-post');post.id='native-more';post.setAttribute('post-title','Loaded by the native feed');post.setAttribute('subreddit-name','news');post.setAttribute('permalink','/r/news/comments/more1/title/');document.querySelector('#native')!.append(post);
@@ -143,7 +143,7 @@ test('Load more delegates to the native feed without a Pureddit API request', as
 });
 
 test('top-bar controls activate original Reddit controls and keep native menus usable', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{
     const header=document.createElement('header');
     for(const [action,label] of [['account','Open user menu'],['notifications','Open notifications'],['create','Create post'],['navigation','Open navigation']]) {
@@ -167,7 +167,7 @@ test('top-bar controls activate original Reddit controls and keep native menus u
 });
 
 test('open shadow-root posts update, late ad labels evict cached cards, and virtualized posts stay readable', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{
     const host=document.createElement('section');host.id='shadow-feed';
     host.attachShadow({mode:'open'}).innerHTML='<shreddit-post post-title="Shadow feed story" subreddit-name="news" permalink="/r/news/comments/shadow1/title/"></shreddit-post><shreddit-ad-post>Native shadow ad</shreddit-ad-post>';
@@ -182,7 +182,7 @@ test('open shadow-root posts update, late ad labels evict cached cards, and virt
 });
 
 test('late-created shadow roots are discovered without a light-DOM mutation', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{const host=document.createElement('section');host.id='late-root';document.body.append(host);});
   await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
   // Let initial extension mutations settle before native hydration attaches a root.
@@ -192,7 +192,7 @@ test('late-created shadow roots are discovered without a light-DOM mutation', as
 });
 
 test('native shadow rerenders cannot permanently remove ad filtering', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{
     const host=document.createElement('section');host.id='rerender-root';host.attachShadow({mode:'open'}).innerHTML='<shreddit-ad-post>Native advertisement</shreddit-ad-post>';document.body.append(host);
   });
@@ -212,7 +212,7 @@ test('the bundled script does not activate on unrelated sites or Reddit account 
 });
 
 test('built popup and content harness coordinate enable/disable through simulated extension storage', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);await expect(page.locator('#pureddit-extension-root')).toBeVisible();
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);await expect(page.locator('#pureddit-extension-root')).toBeVisible();
   const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');
   await expect(popup.getByLabel('Enable reading view')).toBeChecked();
   await popup.getByLabel('Enable reading view').uncheck();await expect(page.locator('#pureddit-extension-root')).toHaveCount(0);
@@ -222,7 +222,7 @@ test('built popup and content harness coordinate enable/disable through simulate
 });
 
 test('modern post actions share and copy real links, handle clipboard denial, and open native voting', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);
   await page.evaluate(()=>{
     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async(text:string)=>{(window as any).copiedPost=text;}}});
     Object.defineProperty(navigator,'share',{configurable:true,value:async(data:ShareData)=>{(window as any).sharedPost=data;}});
@@ -265,7 +265,7 @@ test('native discussion, profile, notifications and composer retain appearance w
 });
 
 test('unrelated native page mutations preserve existing feed cards and focused controls', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);
   const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
   await reader.getByRole('article').first().evaluate(node=>(node as HTMLElement).dataset.identity='preserved');
   await page.locator('#native').evaluate(node=>{node.classList.add('hover-state');node.append(document.createElement('span'));});
@@ -298,10 +298,10 @@ test('Home recognizes Reddit faceplate selection markers without ARIA selection'
 });
 
 test('feed tabs survive full Reddit navigations and browser Back with the correct feed selected', async({context,page})=>{
-  await harness(context,homeFixture);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context,homeFixture);await page.goto('https://www.reddit.com/news');await inject(page);
   page.on('domcontentloaded',()=>{void inject(page).catch(()=>{});});
   const reader=page.locator('#pureddit-extension-root');
-  for (const [name,url] of [['Home','https://www.reddit.com/'],['Popular','https://www.reddit.com/r/popular/'],['News','https://www.reddit.com/r/news/']]) {
+  for (const [name,url] of [['Home','https://www.reddit.com/'],['Popular','https://www.reddit.com/r/popular/'],['News','https://www.reddit.com/news']]) {
     await reader.locator('.primary').getByRole('link',{name,exact:true}).click();await expect(page).toHaveURL(url);
     await expect(reader.getByRole('article')).toHaveCount(1);
     await expect(reader.locator('.primary a.active')).toHaveText(name);
@@ -311,7 +311,7 @@ test('feed tabs survive full Reddit navigations and browser Back with the correc
 });
 
 test('post navigation retains the Pureddit header and native editors without reparenting them', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);
   page.on('domcontentloaded',()=>{void inject(page).catch(()=>{});});
   await page.locator('#pureddit-extension-root').getByRole('link',{name:'A post already loaded on Reddit',exact:true}).click();
   await expect(page).toHaveURL('https://www.reddit.com/r/news/comments/abc123/discussion/');
@@ -333,7 +333,7 @@ test('post navigation retains the Pureddit header and native editors without rep
 });
 
 test('slow feed navigation clears old cards and keeps destination feedback during native mutations', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);
   let release!:()=>void; const wait=new Promise<void>(resolve=>{release=resolve;});
   await context.route('https://www.reddit.com/r/popular/',async route=>{await wait;await route.fulfill({contentType:'text/html',body:fixture});});
   try {
@@ -370,7 +370,7 @@ test('feed and post links use the native router without another document request
   await harness(context,homeFixture);await page.goto('https://www.reddit.com/');
   await page.evaluate(()=>{
     const nav=document.createElement('nav');nav.id='router-links';
-    for(const [name,path] of [['Home','/'],['Popular','/r/popular/'],['News','/r/news/'],['Post','/r/news/comments/soft1/title/']]) {
+    for(const [name,path] of [['Home','/'],['Popular','/r/popular/'],['News','/news'],['Post','/r/news/comments/soft1/title/']]) {
       const a=document.createElement('a');a.href=path;a.textContent=name;
       a.onclick=event=>{event.preventDefault();history.pushState({},'',path);document.body.dataset.router=name;
         if(name==='Post'){document.querySelector('#native-feed')!.setAttribute('hidden','');const section=document.createElement('main');section.className='theme-light';section.innerHTML='<h1>A real native discussion</h1><textarea aria-label="Reddit editor"></textarea>';document.body.append(section);return;}
@@ -378,7 +378,7 @@ test('feed and post links use the native router without another document request
       };nav.append(a);
     }document.body.prepend(nav);
     const news=[...nav.querySelectorAll('a')].find(a=>a.textContent==='News')!;news.remove();
-    document.addEventListener('click',event=>{const link=(event.target as Element).closest?.('a');if(link?.getAttribute('href')==='https://www.reddit.com/r/news/'&&news.onclick)news.onclick.call(link,event as PointerEvent);});
+    document.addEventListener('click',event=>{const link=(event.target as Element).closest?.('a');if(link?.getAttribute('href')==='https://www.reddit.com/news'&&news.onclick)news.onclick.call(link,event as PointerEvent);});
   });
   await inject(page);const reader=page.locator('#pureddit-extension-root');
   await reader.getByRole('button',{name:'Dark mode',exact:true}).click();
@@ -400,7 +400,7 @@ test('feed and post links use the native router without another document request
 });
 
 test('navigation hover mutations do not repeatedly extract the feed', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);
   await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);await page.waitForTimeout(250);
   await page.evaluate(()=>{
     (window as any).feedScans=0;const original=document.querySelectorAll.bind(document);
@@ -428,7 +428,7 @@ test('Your Feed excludes unchanged suggested cards retained during a partial nat
 });
 
 test('canceling a stalled feed switch restores the current feed immediately', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{const a=document.createElement('a');a.href='/r/popular/';a.textContent='Popular';a.onclick=e=>e.preventDefault();document.querySelector('#native')!.append(a);});
   await inject(page);const reader=page.locator('#pureddit-extension-root');
   await reader.locator('.primary').getByRole('link',{name:'Popular',exact:true}).click();
@@ -441,7 +441,7 @@ test('canceling a stalled feed switch restores the current feed immediately', as
 });
 
 test('native routing redirects with canonical query parameters do not stall the reader', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{const a=document.createElement('a');a.href='/r/popular/';a.textContent='Popular';a.onclick=e=>{e.preventDefault();history.pushState({},'', '/r/popular/?feed=popular');const card=document.querySelector('shreddit-post')!;card.setAttribute('post-title','Canonical destination story');card.setAttribute('permalink','/r/news/comments/canon1/title/');};document.querySelector('#native')!.append(a);});
   await inject(page);const reader=page.locator('#pureddit-extension-root');await reader.locator('.primary').getByRole('link',{name:'Popular',exact:true}).click();
   await expect(reader.getByRole('link',{name:'Canonical destination story',exact:true})).toBeVisible();
@@ -457,15 +457,15 @@ test('explicit native deselection overrides stale tab-selected CSS classes', asy
 });
 
 test('native-hidden cards are evicted from the reading cache', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);
   await page.locator('#native shreddit-post').first().evaluate(node=>{(node as HTMLElement).hidden=true;});
   await expect(reader.getByRole('article')).toHaveCount(0);
 });
 
 test('Modern uses native media without duplicating players or changing autoplay preferences', async({context,page})=>{
   const native=fixture.replace('<div id="native">','<shreddit-app><div id="native">').replace('</body>','</shreddit-app></body>');
-  await harness(context);await context.route('https://www.reddit.com/r/news/',route=>route.fulfill({contentType:'text/html',body:native}));
-  await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:native}));
+  await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{
     const post=document.querySelector('shreddit-post')!;post.innerHTML='<h2>A native video post</h2><video slot="post-media-container" autoplay muted controls></video><img slot="post-media-preview" src="https://i.redd.it/preview.jpg">';
     (window as any).originalPlayer=post.querySelector('video');(window as any).playerParent=post;(window as any).playerCalls=0;
@@ -483,16 +483,16 @@ test('Modern uses native media without duplicating players or changing autoplay 
 test('native Modern Home defaults to Your Feed and filters suggestions without replacing content', async({context,page})=>{
   const native=homeFixture.replace('<body>','<body><shreddit-app>').replace('</body>','</shreddit-app></body>');
   await harness(context,native);await page.goto('https://www.reddit.com/');await inject(page);const shell=page.locator('#pureddit-native-controls');
-  await expect(shell.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
+  await expect(page.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
   await expect(page.locator('[data-native-mode=following]')).toHaveAttribute('aria-selected','true');
   await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(1);
-  await shell.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(3);
-  await shell.getByRole('tab',{name:'Your Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(1);
+  await page.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(3);
+  await page.getByRole('tab',{name:'Your Feed',exact:true}).click();await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(1);
   await expect(page.locator('#native-feed shreddit-post[promoted]')).toBeHidden();
 });
 
 test('a one-card update reparses one card and preserves other rows, menu state and shortcut drafts', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{const host=document.getElementById('native')!;for(let i=0;i<100;i++){const post=document.createElement('shreddit-post');post.setAttribute('post-title',`Story ${i}`);post.setAttribute('subreddit-name','news');post.setAttribute('permalink',`/r/news/comments/perf${i}/title/`);post.setAttribute('score','1');host.append(post);}});
   await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(101);
   await reader.getByLabel('Add a shortcut',{exact:true}).fill('draft');await reader.getByRole('article').nth(2).locator('.post-menu summary').click();
@@ -508,7 +508,7 @@ test('a one-card update reparses one card and preserves other rows, menu state a
 });
 
 test('background feed updates wait for visibility and resume with current metadata', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.locator('.score-number').first()).toHaveText('42');
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.locator('.score-number').first()).toHaveText('42');
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.querySelector('shreddit-post')!.setAttribute('score','321');});
   await page.waitForTimeout(150);await expect(reader.locator('.score-number').first()).toHaveText('42');
   await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>false});document.dispatchEvent(new Event('visibilitychange'));});
@@ -516,7 +516,7 @@ test('background feed updates wait for visibility and resume with current metada
 });
 
 test('cached metadata updates when a native link target or text node changes', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{const post=document.querySelector('shreddit-post')!;post.removeAttribute('permalink');post.removeAttribute('post-title');post.innerHTML='<a slot="full-post-link" href="/r/news/comments/first1/title/"></a><h2>Initial native title</h2>';});
   await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('link',{name:'Initial native title',exact:true})).toBeVisible();
   await page.evaluate(()=>{document.querySelector('#native a[slot=full-post-link]')!.setAttribute('href','/r/news/comments/second1/title/');document.querySelector('#native h2')!.firstChild!.textContent='Updated native title';});
@@ -529,7 +529,7 @@ test('cached metadata updates when a native link target or text node changes', a
 });
 
 test('native Modern score and text updates do not rescan the feed, while ad changes still filter', async({context,page})=>{
-  await harness(context);const native=fixture.replace('<div id="native">','<shreddit-app><div id="native">').replace('</body>','</shreddit-app></body>');await context.route('https://www.reddit.com/r/news/',route=>route.fulfill({contentType:'text/html',body:native}));await page.goto('https://www.reddit.com/r/news/');
+  await harness(context);const native=fixture.replace('<div id="native">','<shreddit-app><div id="native">').replace('</body>','</shreddit-app></body>');await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:native}));await page.goto('https://www.reddit.com/news');
   await page.evaluate(()=>{document.querySelector('shreddit-post')!.innerHTML='<h2>Native title</h2>';});await inject(page);await expect(page.locator('#pureddit-native-controls')).toBeVisible();await page.waitForTimeout(150);
   const scans=await page.evaluate(async()=>{let scans=0;const query=document.querySelectorAll.bind(document);document.querySelectorAll=((s:string)=>{if(s==='shreddit-post, .thing.link')scans++;return query(s);}) as typeof query;
     const post=document.querySelector('shreddit-post')!;for(let i=0;i<4;i++){post.setAttribute('score',String(100+i));post.querySelector('h2')!.firstChild!.textContent=`Title ${i}`;await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);}return scans;});
@@ -537,20 +537,55 @@ test('native Modern score and text updates do not rescan the feed, while ad chan
 });
 
 test('nested native insertions discover the added subtree once per mutation batch', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await inject(page);await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);await page.waitForTimeout(150);
+  await harness(context);await page.goto('https://www.reddit.com/news');await inject(page);await expect(page.locator('#pureddit-extension-root').getByRole('article')).toHaveCount(1);await page.waitForTimeout(150);
   await page.evaluate(()=>{(window as any).subtreeScans=0;const query=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(s:string){if(s==='*')(window as any).subtreeScans++;return query.call(this,s);} as typeof query;let parent=document.getElementById('native')!;for(let i=0;i<100;i++){const child=document.createElement('div');parent.append(child);parent=child;}});
   await page.waitForTimeout(250);expect(await page.evaluate(()=>(window as any).subtreeScans)).toBeLessThanOrEqual(2);
 });
 
 test('disabled extension skips root discovery and restarts with fresh metadata when enabled', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await page.evaluate(()=>{localStorage.setItem('pureddit.preferences.v1',JSON.stringify({enabled:false}));(window as any).disabledScans=0;const query=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(s:string){if(s==='*')(window as any).disabledScans++;return query.call(this,s);} as typeof query;});
+  await harness(context);await page.goto('https://www.reddit.com/news');await page.evaluate(()=>{localStorage.setItem('pureddit.preferences.v1',JSON.stringify({enabled:false}));(window as any).disabledScans=0;const query=Element.prototype.querySelectorAll;Element.prototype.querySelectorAll=function(s:string){if(s==='*')(window as any).disabledScans++;return query.call(this,s);} as typeof query;});
   await inject(page);await page.evaluate(()=>{document.querySelector('shreddit-post')!.setAttribute('post-title','Changed while disabled');document.querySelector('#native')!.append(document.createElement('section'));});await page.waitForTimeout(200);
   expect(await page.evaluate(()=>(window as any).disabledScans)).toBe(0);
   const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').check();await expect(page.locator('#pureddit-extension-root').getByRole('link',{name:'Changed while disabled',exact:true})).toBeVisible();
 });
 
 test('new shadow hosts are checked on the next frame without waiting for the periodic probe', async({context,page})=>{
-  await harness(context);await page.goto('https://www.reddit.com/r/news/');await page.clock.install();await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);await page.clock.runFor(300);
+  await harness(context);await page.goto('https://www.reddit.com/news');await page.clock.install();await inject(page);const reader=page.locator('#pureddit-extension-root');await expect(reader.getByRole('article')).toHaveCount(1);await page.clock.runFor(300);
   await page.evaluate(()=>{const host=document.createElement('section');document.getElementById('native')!.append(host);queueMicrotask(()=>{host.attachShadow({mode:'open'}).innerHTML='<shreddit-post post-title="Ready on the next frame" subreddit-name="news" permalink="/r/news/comments/fastroot1/title/"></shreddit-post>';});});
   await page.clock.runFor(100);await expect(reader.getByRole('link',{name:'Ready on the next frame',exact:true})).toBeVisible();
+});
+
+test('Modern uses one native navigation and overrides dark-profile surfaces in open shadow roots', async({context,page})=>{
+  const native=homeFixture.replace('<body>','<body class="theme-dark"><shreddit-app>').replace('</body>','<reddit-header-large>Native account and search</reddit-header-large><nav><a id="native-home" href="/">Home</a></nav><aside class="bg-neutral-background-strong text-neutral-content">Sidebar</aside><section id="component"></section></shreddit-app></body>');
+  await harness(context,native);await page.goto('https://www.reddit.com/');await page.evaluate(()=>{document.getElementById('component')!.attachShadow({mode:'open'}).innerHTML='<style>:host{--color-neutral-background-strong:#000;--color-neutral-content-strong:#eee}.panel{background:var(--color-neutral-background-strong);color:var(--color-neutral-content-strong)}</style><div class="panel"><h2>Shadow heading</h2></div>';});
+  await page.locator('#native-home').evaluate(node=>node.addEventListener('click',event=>event.preventDefault()));
+  await inject(page);const shell=page.locator('#pureddit-native-controls');await expect(shell.getByRole('button',{name:'Light mode',exact:true})).toHaveAttribute('aria-pressed','true');
+  await expect(shell.locator('.topbar')).toBeHidden();await expect(shell.locator('.native-feeds')).toBeHidden();await expect(shell.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:'Your Feed',exact:true})).toHaveCount(1);await expect(page.getByRole('tab',{name:'Suggested Feed',exact:true})).toHaveCount(1);
+  await expect(page.locator('aside.bg-neutral-background-strong')).toHaveCSS('background-color','rgb(255, 255, 255)');await expect(page.locator('aside.bg-neutral-background-strong')).toHaveCSS('color','rgb(38, 52, 63)');
+  await expect(page.locator('#component .panel')).toHaveCSS('background-color','rgb(255, 255, 255)');await expect(page.locator('#component h2')).toHaveCSS('color','rgb(38, 52, 63)');
+  expect(await page.locator('#component').evaluate(node=>node.shadowRoot!.adoptedStyleSheets.length)).toBe(1);
+  await page.getByRole('tab',{name:'Suggested Feed',exact:true}).click();await expect(page.locator('[data-native-mode=for-you]')).toHaveAttribute('aria-selected','true');await expect(page.locator('#native-feed shreddit-post:not([data-pureddit-filtered])')).toHaveCount(3);
+  await page.locator('#native-home').click();await expect(page.getByRole('tab',{name:'Your Feed',exact:true})).toHaveAttribute('aria-selected','true');
+  await shell.getByRole('button',{name:'Dark mode',exact:true}).click();await expect(page.locator('#component .panel')).toHaveCSS('background-color','rgb(16, 18, 20)');
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').uncheck();await expect(page.getByRole('tab',{name:'Following',exact:true})).toBeVisible();await expect(page.locator('#component #pureddit-shadow-theme')).toHaveCount(0);expect(await page.locator('#component').evaluate(node=>node.shadowRoot!.adoptedStyleSheets.length)).toBe(0);await expect(page.locator('#component .panel')).toHaveCSS('background-color','rgb(0, 0, 0)');
+});
+
+test('Old native discussions retain classic typography, compact media, and editable Reddit forms in both themes', async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/r/news/comments/old1/title/',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><main><shreddit-post><h1>Classic native post</h1><img slot="post-media-preview" src="https://i.redd.it/classic.jpg"></shreddit-post><shreddit-comment-tree><shreddit-comment>Native comment<textarea aria-label="Native reply"></textarea><button id="reply">Reply</button></shreddit-comment></shreddit-comment-tree></main></shreddit-app></body></html>'}));
+  await page.goto('https://www.reddit.com/r/news/comments/old1/title/');await page.evaluate(()=>localStorage.setItem('pureddit.preferences.v1',JSON.stringify({appearance:'old'})));await inject(page);const shell=page.locator('#pureddit-native-controls');
+  for(const mode of ['Light mode','Dark mode']){await shell.getByRole('button',{name:mode,exact:true}).click();await expect(page.locator('shreddit-app main h1')).toHaveCSS('font-size','20px');await expect(page.locator('shreddit-comment')).toHaveCSS('font-size','12px');await expect(page.locator('shreddit-app main button')).toHaveCSS('border-radius','2px');await expect(page.locator('img')).toHaveCSS('max-width','300px');}
+  await page.getByLabel('Native reply').fill('Native draft stays editable');await shell.getByRole('button',{name:'Modern layout',exact:true}).click();await shell.getByRole('button',{name:'Old layout',exact:true}).click();await expect(page.getByLabel('Native reply')).toHaveValue('Native draft stays editable');
+});
+
+test('the single native News link opens /news even if its original router handler targets r/news', async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/r/popular/',route=>route.fulfill({contentType:'text/html',body:'<html><body><shreddit-app><nav><a id="native-news" href="/r/news/">News</a></nav><shreddit-post post-title="Story" subreddit-name="news" permalink="/r/news/comments/story1/title/"></shreddit-post><script>document.querySelector("#native-news").onclick=event=>{event.preventDefault();history.pushState({},"","/r/news/");};</script></shreddit-app></body></html>'}));
+  await page.goto('https://www.reddit.com/r/popular/');await inject(page);await expect(page.locator('#native-news')).toHaveAttribute('href','https://www.reddit.com/news');await expect(page.getByRole('link',{name:'News',exact:true})).toHaveCount(1);
+  await page.locator('#native-news').click();await expect(page).toHaveURL('https://www.reddit.com/news');
+});
+
+test('integrated Home keeps an explanation and native controls available when Following is unavailable', async({context,page})=>{
+  const native='<html><body><shreddit-app><reddit-header-large><button>Sign in to Reddit</button></reddit-header-large><shreddit-post post-title="Unconfirmed feed" subreddit-name="news" permalink="/r/news/comments/unconfirmed1/title/"><h2>Unconfirmed feed</h2></shreddit-post></shreddit-app></body></html>';
+  await harness(context,native);await page.goto('https://www.reddit.com/');await inject(page);const shell=page.locator('#pureddit-native-controls');await expect(shell.getByRole('status')).toContainText('Following');await expect(page.locator('shreddit-post')).toBeHidden();
+  await shell.getByRole('button',{name:'Open Reddit’s feed controls',exact:true}).click();await expect(page.getByRole('button',{name:'Sign in to Reddit',exact:true})).toBeVisible();await expect(page.locator('shreddit-post')).toBeVisible();
 });

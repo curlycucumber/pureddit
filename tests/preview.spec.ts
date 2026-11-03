@@ -13,7 +13,7 @@ test('preview shares the reader, supports all three targets, and never calls a b
   await expect(page.locator('.device-frame')).toHaveClass(/iphone/);
   await page.locator('#reader-host').getByRole('link', { name: 'News', exact: true }).click();
   await expect(page.locator('#reader-host').getByRole('article')).toHaveCount(1);
-  await expect(page.getByRole('heading', { name: 'r/news', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'News', exact: true })).toBeVisible();
   await page.locator('#reader-host').getByRole('button',{name:'Old layout',exact:true}).click();
   await expect(page.locator('#reader-host').getByRole('article')).toHaveCount(1);
   expect(apiCalls).toEqual([]);
@@ -33,6 +33,8 @@ test('shortcuts, five recent communities, preview persistence, and scoped legacy
   expect(await page.evaluate(() => localStorage.getItem('unrelated'))).toBe('keep');
   for (const name of ['Design','technology','photography','books']) await reader.locator('.pins').getByRole('link', { name: `r/${name}`, exact: true }).click();
   await reader.getByRole('link', { name: 'News', exact: true }).click();
+  await expect(reader.locator('.recent a')).toHaveCount(4);
+  await reader.locator('.posts .subreddit').click();
   await reader.locator('.pins').getByRole('link', { name: 'r/books', exact: true }).click();
   await expect(reader.locator('.recent a')).toHaveCount(5);
   await expect(reader.locator('.recent a').first()).toHaveText('r/books');

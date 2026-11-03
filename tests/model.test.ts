@@ -7,6 +7,8 @@ test('only supported Reddit feed URLs activate the reader; discussions and priva
   assert.equal(pageFromUrl('https://old.reddit.com/r/news/top/')?.sort, 'top');
   assert.equal(pageFromUrl('https://www.reddit.com/r/photography/')?.kind, 'community');
   for (const url of ['https://example.com/r/news/', 'https://www.reddit.com.evil.invalid/', 'https://www.reddit.com/r/news/comments/abc/title/', 'https://www.reddit.com/message/inbox/', 'https://www.reddit.com/user/reader/', 'https://www.reddit.com/login/']) assert.equal(pageFromUrl(url), null);
+  assert.equal(pageFromUrl('https://www.reddit.com/news')?.kind,'news');
+  assert.equal(pageFromUrl('https://www.reddit.com/r/news/')?.kind,'community');
   assert.equal(sortUrl(pageFromUrl('https://www.reddit.com/r/news/')!, 'new'), 'https://www.reddit.com/r/news/new/');
 });
 test('local preferences validate and deduplicate names without retaining arbitrary data', () => {
