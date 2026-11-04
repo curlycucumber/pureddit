@@ -6,9 +6,10 @@ import { createFixture } from './fixtures';
 import { createDiscussionState, discussionCount, mountDiscussion, mountPostComposer, type DiscussionState } from './discussion';
 import discussionTheme from './discussion.css?inline';
 import './preview.css';
+import { keyboardNavigation } from '../shared/keyboard';
 
 const root = document.querySelector<HTMLElement>('#app')!;
-root.innerHTML = `<header class="preview-header"><div><p class="preview-kicker">Pureddit WebExtension</p><h1>One reading view. Across your browsers.</h1><p>Interactive preview with sample content. Click a post or comment count to explore a discussion.</p></div><a class="guide" href="https://github.com/curlycucumber/pureddit/blob/main/docs/INSTALL.md" target="_blank" rel="noopener noreferrer">Installation guide ↗</a></header><section class="preview-controls" aria-label="Preview controls"><div class="devices" aria-label="Browser preview"><button data-device="firefox" aria-pressed="true">Firefox · desktop</button><button data-device="chrome" aria-pressed="false">Chrome · desktop</button><button data-device="safari" aria-pressed="false">Safari · iPhone</button></div></section><p class="preview-caption" role="status">Click a post or comment count to try a sample discussion. Demo comments and votes stay in this page.</p><div class="device-wrap"><div class="device-frame"><div class="browser-bar"><span class="browser-dots">● ● ●</span><span id="address">reddit.com/r/popular</span><span class="preview-badge">Sample page</span></div><div id="reader-host"></div></div></div><div class="preview-message" role="status" hidden></div><section class="downloads"><div><h2>Try the extension</h2><p>Unsigned development packages. Browser-store publication is a separate step.</p></div><div class="download-links"><a href="/downloads/pureddit-firefox.zip" download>Firefox package ↓</a><a href="/downloads/pureddit-chrome.zip" download>Chrome package ↓</a><a href="/downloads/pureddit-safari.zip" download>Safari source ↓</a></div><p class="safari-note">Safari on iPhone needs an Xcode wrapper built and signed on a Mac. The Safari ZIP is extension source, not an installable iPhone app.</p></section><footer class="preview-footer">Pureddit · Source on <a href="https://github.com/curlycucumber/pureddit">GitHub</a> · No Reddit API, account connection, or database.</footer>`;
+root.innerHTML = `<header class="preview-header"><div><p class="preview-kicker">Pureddit WebExtension</p><h1>One reading view. Across your browsers.</h1><p>Interactive preview with sample content. Click a post or comment count to explore a discussion.</p></div><a class="guide" href="https://github.com/curlycucumber/pureddit/blob/main/docs/INSTALL.md" target="_blank" rel="noopener noreferrer">Installation guide ↗</a></header><section class="preview-controls" aria-label="Preview controls"><div class="devices" aria-label="Browser preview"><button data-device="firefox" aria-pressed="true">Firefox · desktop</button><button data-device="chrome" aria-pressed="false">Chrome · desktop</button><button data-device="safari" aria-pressed="false">Safari · iPhone</button></div></section><p class="preview-caption" role="status">Click a post or comment count to try a sample discussion. Demo comments and votes stay in this page.</p><div class="device-wrap"><div class="device-frame"><div class="browser-bar"><span class="browser-dots">● ● ●</span><span id="address">reddit.com/r/popular</span><span class="preview-badge">Sample page</span></div><div id="reader-host"></div></div></div><div class="preview-message" role="status" hidden></div><section class="downloads"><div><h2>Try the extension</h2><p>Unsigned development packages. Browser-store publication is a separate step.</p></div><div class="download-links"><a href="/downloads/pureddit-firefox.zip" download>Firefox package ↓</a><a href="/downloads/pureddit-chrome.zip" download>Chrome package ↓</a><a href="/downloads/pureddit-safari.zip" download>Safari source ↓</a></div><p class="safari-note">Safari on iPhone needs an Xcode wrapper built and signed on a Mac. The Safari ZIP is extension source, not an installable iPhone app.</p></section><footer class="preview-footer">Pureddit · Source on <a href="https://github.com/curlycucumber/pureddit">GitHub</a> · <a href="/privacy.html">Privacy</a> · No Reddit API, account connection, or database.</footer>`;
 const KEY = 'pureddit:preview:v2';
 let preferences = normalizePreferences({ ...DEFAULTS, pins: ['Design', 'technology', 'photography'] });
 try {
@@ -35,6 +36,7 @@ let openComments = false;
 shadow.addEventListener('click', event => { openComments = event.composedPath().some(element => element instanceof Element && element.classList.contains('comment-pill')); }, true);
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(preferences)); } catch { reader.message('Preview preferences could not be saved in this browser.'); } }
 const reader = mountReader(shadow, theme + discussionTheme, {
+  preferences(value) { preferences = normalizePreferences({ ...preferences, reading:value.reading, distractions:value.distractions, titleFilters:value.titleFilters, keyboard:value.keyboard }); persist();render(); },
   preview: true,
   more() { reader.message('The installed extension asks Reddit’s native feed to load more posts. This preview has sample content only.'); },
   homeMode(value) { homeMode = value; updateRoute(activePost); },
@@ -45,6 +47,15 @@ const reader = mountReader(shadow, theme + discussionTheme, {
   navigate,
   pin(name) { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) { preferences = { ...preferences, pins: [...preferences.pins, name] }; persist(); render(); } },
   unpin(name) { preferences = { ...preferences, pins: preferences.pins.filter(item => item !== name) }; persist(); render(); },
+});
+let shortcutOpened = false;
+const previewShortcuts = keyboardNavigation(shadow, {
+  enabled: () => preferences.keyboard && !document.querySelector('.device-frame')!.classList.contains('iphone') && matchMedia('(pointer:fine)').matches,
+  posts: () => activePost || postComposer ? [] : [...shadow.querySelectorAll<HTMLElement>('.post')].map(element=>({element,
+    open:()=>{shortcutOpened=true;element.querySelector<HTMLAnchorElement>('.post-title')?.click();},
+    comments:()=>{shortcutOpened=true;element.querySelector<HTMLAnchorElement>('.comment-pill')?.click();},
+  })),
+  back: () => { if (!activePost || !shortcutOpened) return false; shortcutOpened=false;updateRoute();return true; },
 });
 function previewUrl(post?: Post, compose = false) {
   const params = new URLSearchParams({ feed: feedUrl, mode: homeMode }); if (post) params.set('post', post.id);
@@ -118,6 +129,7 @@ function readRoute() {
   document.querySelector<HTMLElement>('.preview-message')!.hidden = true;
 }
 function render() {
+  if (!preferences.keyboard) previewShortcuts.clear();
   const fixture = createFixture(preferences.appearance, page.kind === 'home' && homeMode === 'following' ? 'home' : page.kind === 'home' ? 'popular' : page.kind === 'news' ? 'news' : page.community || 'popular');
   if (page.kind === 'home' && homeMode === 'following') [...fixture.children].slice(3).forEach(node => node.remove());
   const extracted = extractPosts(fixture, location.href, { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' });

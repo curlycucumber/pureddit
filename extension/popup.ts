@@ -1,4 +1,6 @@
 import { loadPreferences, savePreferences } from './storage';
+import { VERSION } from '../shared/model';
+document.querySelector('footer')!.textContent = `pureddit ${VERSION} · Local preferences. No tracking.`;
 const enabled = document.querySelector<HTMLInputElement>('#enabled')!;
 const status = document.querySelector<HTMLElement>('#status')!;
 enabled.disabled = true;

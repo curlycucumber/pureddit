@@ -1,6 +1,6 @@
 {
   "name": "pureddit",
-  "version": "0.3.13",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -12,9 +12,10 @@
     "preview": "vite preview --host 0.0.0.0",
     "safari:prepare": "npm run build && bash scripts/convert-safari.sh",
     "safari:sync": "npm run build && node scripts/sync-safari.mjs",
-    "test": "npm run build && node --import tsx --test tests/model.test.ts tests/packaging.test.mjs tests/safari-sync.test.mjs && playwright test",
+    "test": "npm run build && node --import tsx --test tests/model.test.ts tests/packaging.test.mjs tests/safari-sync.test.mjs tests/release.test.mjs && playwright test",
     "test:browser": "playwright test",
-    "lint:extension": "web-ext lint --source-dir dist/extensions/firefox --warnings-as-errors"
+    "lint:extension": "web-ext lint --source-dir dist/extensions/firefox --warnings-as-errors",
+    "release:prepare": "node scripts/prepare-release.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

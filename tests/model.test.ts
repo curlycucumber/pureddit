@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULTS, externalUrl, normalizePreferences, pageFromUrl, postUrl, sortUrl, visit } from '../shared/model';
+import { DEFAULTS, externalUrl, matchesTitle, normalizePreferences, pageFromUrl, postUrl, sortUrl, visit } from '../shared/model';
 
 test('only supported Reddit feed URLs activate the reader; discussions and private pages stay native', () => {
   assert.equal(pageFromUrl('https://www.reddit.com/new/')?.kind, 'home');
@@ -37,4 +37,14 @@ test('post links cannot point at another site, run script, or expose URL credent
 test('outbound source links accept web destinations without scripts or embedded credentials', () => {
   assert.equal(externalUrl('https://example.org/story?section=news'), 'https://example.org/story?section=news');
   for (const value of ['javascript:alert(1)', 'data:text/html,unsafe', 'https://reader:secret@example.org/story', '/relative', 'https://www.reddit.com/r/news/comments/abc/title/']) assert.equal(externalUrl(value), undefined);
+});
+
+test('new preferences migrate old settings, bound literal filters and retain only explicit flags',()=>{
+  const previous=normalizePreferences({appearance:'old',colorScheme:'dark',pins:['books']});
+  assert.deepEqual(previous.reading,DEFAULTS.reading);assert.deepEqual(previous.distractions,DEFAULTS.distractions);assert.equal(previous.keyboard,false);
+  const value=normalizePreferences({reading:{textSize:'larger',contentWidth:'wide',density:'compact'},distractions:{games:true,explore:'true',recommended:true},titleFilters:['Spoiler','SPOILER','  ','a+b',null,'x'.repeat(200)],keyboard:true});
+  assert.deepEqual(value.titleFilters,['Spoiler','a+b','x'.repeat(100)]);assert.equal(value.distractions.explore,false);assert.equal(value.reading.textSize,'larger');
+  assert.equal(normalizePreferences({titleFilters:Array.from({length:60},(_,i)=>`phrase${i}`)}).titleFilters.length,30);
+  assert.equal(matchesTitle('A+B is literal',['a+b']),true);assert.equal(matchesTitle('AAAB',['a+b']),false);
+  assert.equal(matchesTitle('ＳＰＯＩＬＥＲ in the title',['spoiler']),true);
 });

@@ -1,8 +1,9 @@
-import { communityUrl, COMMUNITY, HOME_URL, NEWS_URL, sortUrl, VERSION, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
+import { communityUrl, COMMUNITY, HOME_URL, NEWS_URL, sortUrl, VERSION, matchesTitle, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
 import type { Extraction } from './extract';
+import { mountTools, type ToolActions } from './tools';
 
 export type ReaderModel = Extraction & { page: Page; preferences: Preferences; preview: boolean; homeFeed?: HomeFeed };
-export type ReaderActions = { original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; colorScheme: (value: ColorScheme) => void; native: (action: NativeAction) => void; homeMode: (value: HomeMode) => void; more: () => void; preview?: boolean };
+export type ReaderActions = ToolActions & { original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; colorScheme: (value: ColorScheme) => void; native: (action: NativeAction) => void; homeMode: (value: HomeMode) => void; more: () => void; preview?: boolean };
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, content?: string) {
   const node = document.createElement(tag); node.className = className; if (content !== undefined) node.textContent = content; return node;
 }
@@ -61,6 +62,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
       </main>
     </div>`;
   root.replaceChildren(style, reader);
+  const tools = mountTools(reader, actions);
   const find = <T extends Element = HTMLElement>(selector: string) => reader.querySelector<T>(selector)!;
   find('.version').textContent = `pureddit ${VERSION}`;
   find('.community-toggle').append(icon('menu'));
@@ -107,10 +109,22 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
   const message = (text: string) => { const notice = find<HTMLElement>('.notice'); notice.textContent = text; notice.hidden = !text; };
   let lastPosts = ''; let lastNavigation = '';
   const cards = new Map<string,{signature:string; element:HTMLElement}>();
-  return {
+  let filterContext = '', revealTitles = false; let currentModel: ReaderModel;
+  const api = {
     update(model: ReaderModel) {
-      const { page, preferences, posts } = model;
+      currentModel = model;
+      const { page, preferences } = model;
+      const context = JSON.stringify([page,model.homeFeed?.mode,preferences.titleFilters]);
+      if (context !== filterContext) { filterContext = context; revealTitles = false; }
+      const matching = preferences.titleFilters.length ? model.posts.filter(post => matchesTitle(post.title, preferences.titleFilters)) : [];
+      const hidden = new Set(matching.map(post=>post.href));
+      const posts = revealTitles || !matching.length ? model.posts : model.posts.filter(post=>!hidden.has(post.href));
+      tools.update(preferences);
+      tools.filters(matching.length, revealTitles, () => { revealTitles = !revealTitles; api.update(currentModel); });
       reader.dataset.appearance = preferences.appearance;
+      reader.dataset.textSize = preferences.reading.textSize;
+      reader.dataset.contentWidth = preferences.reading.contentWidth;
+      reader.dataset.density = preferences.reading.density;
       reader.dataset.preview = String(model.preview);
       reader.dataset.page = page.kind;
       reader.dataset.theme = preferences.colorScheme;
@@ -163,7 +177,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
         const link = anchor(sort[0].toUpperCase() + sort.slice(1), sortUrl(page, sort), actions, page.sort === sort ? 'selected' : ''); if (page.sort === sort) link.setAttribute('aria-current', 'true'); sorts.append(link);
       }
       }
-      const signature = JSON.stringify([posts, model.homeFeed?.status, model.homeFeed?.mode]);
+      const signature = JSON.stringify([posts, model.homeFeed?.status, model.homeFeed?.mode, matching.length]);
       if (lastPosts !== signature) {
         lastPosts = signature;
         const list = find('.posts');
@@ -184,13 +198,17 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
         });
         if (!posts.length) {
           list.replaceChildren();
-          const empty = element('div', 'empty'); empty.append(element('h2', '', 'No supported posts loaded yet'), element('p', '', 'Reddit may still be loading, require sign-in, or use a page layout this version does not recognize.'));
+          const empty = element('div', 'empty'); empty.append(element('h2', '', matching.length ? 'These posts match your title filters' : 'No supported posts loaded yet'), element('p', '', matching.length ? 'Use the filtered-posts button above to reveal them or change your preferences.' : 'Reddit may still be loading, require sign-in, or use a page layout this version does not recognize.'));
           const button = element('button', 'original empty-action', 'Show original Reddit'); button.addEventListener('click', actions.original); empty.append(button); list.append(empty);
         }
       }
     },
     message,
+    filters: tools.filters,
+    closeTools: tools.close,
+    toolsOpen: tools.isOpen,
   };
+  return api;
 }
 function postCard(post: Post, actions: ReaderActions, rank: number, message: (text: string) => void) {
   const article = element('article', 'post');

@@ -34,3 +34,9 @@ This is a development build. Automated fixture/harness checks cannot certify liv
 Full browser-store distribution is separate: Chrome/Firefox publication/signing and Apple signing/TestFlight/App Store setup have not been completed here. Local development installation remains available as documented in INSTALL.md.
 
 The Ko-fi link is deferred at the owner's request until their destination URL is available. No placeholder donation destination is shipped.
+
+## 0.4.0 reading tools
+
+Regression coverage includes migrating existing preferences, literal/bounded title filters, revealing matches while ads stay hidden, removing title filters on native discussions, preserving the original media node, sidebar exclusions for rules/joined communities, searching and pinning in the Modern bar, restoring styles on disable, native menu/editor keyboard boundaries, and the new dialogs in Modern/Old and light/dark mobile previews. Settings remain local and opt-in.
+
+Release candidates include matching versions and verified SHA-256 checksums. A review-source manifest permits packaging outside a Git checkout. Publishing preparation and the privacy page are committed, but no publisher accounts, signed browser-store releases, Apple signing identity, or TestFlight beta are configured. Use `docs/PUBLISHING.md` for those remaining owner/account steps.

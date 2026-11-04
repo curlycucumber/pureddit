@@ -1,6 +1,7 @@
 import { pageFromUrl, NEWS_URL, type Page, type HomeFeed, type HomeMode, type Preferences } from '../shared/model';
 import { nativeTheme } from './native-theme';
 import { mountReader, type ReaderActions } from '../shared/reader';
+import { nativeReadingCss } from './enhancements';
 
 // Keep Reddit's real forms, editors, menus and events; only apply appearance.
 export function nativePage(url: string) {
@@ -16,12 +17,13 @@ export function nativeAppearance(theme: string, actions: ReaderActions) {
   let panel: HTMLDivElement | undefined;
   let reader: ReturnType<typeof mountReader> | undefined; let resize: ResizeObserver | undefined;
   const offset = () => { const height = panel?.getBoundingClientRect().height || 0; document.documentElement.style.setProperty('--pureddit-shell-height', `${height}px`); };
-  function clear() { for(const [root,sheet] of shadowStyles){if(sheet)sheet.remove();else root.adoptedStyleSheets=root.adoptedStyleSheets.filter(value=>value!==sharedSheet);}shadowStyles.clear();style.remove(); resize?.disconnect(); resize = undefined; panel?.remove(); panel = undefined; reader = undefined; document.documentElement.style.removeProperty('--pureddit-shell-height'); document.documentElement.removeAttribute('data-pureddit-native'); }
+  function clear() { reader?.closeTools();for(const [root,sheet] of shadowStyles){if(sheet)sheet.remove();else root.adoptedStyleSheets=root.adoptedStyleSheets.filter(value=>value!==sharedSheet);}shadowStyles.clear();style.remove(); resize?.disconnect(); resize = undefined; panel?.remove(); panel = undefined; reader = undefined; document.documentElement.style.removeProperty('--pureddit-shell-height'); document.documentElement.removeAttribute('data-pureddit-native'); }
   function update(preferences: Preferences) {
     integrated = Boolean(document.querySelector('shreddit-app'));
     const palette = nativeTheme(preferences);
     const classic = preferences.appearance === 'old';
     shadowCss = `${classic ? ':host{--rem14:12px!important;--rem16:13px!important;font-family:Arial,sans-serif!important;} :host(shreddit-comment){font-size:12px!important;line-height:1.5!important;} button{border-radius:2px!important;} [slot=comment-body]{font-size:12px!important;}' : ''}:host, .theme-dark, .theme-light {${palette.declarations}}${palette.rules('')}`;
+    shadowCss += nativeReadingCss('',preferences.reading);
     const dark = preferences.colorScheme === 'dark';
     const background = dark ? '#101214' : '#ffffff', soft = dark ? '#252c31' : '#f1f5f8', text = dark ? '#e7e9ec' : '#26343f', muted = dark ? '#a8b4bc' : '#5c6c79', border = dark ? '#394249' : '#d5dfe8', link = dark ? '#80a7ff' : '#0756a6';
     document.documentElement.setAttribute('data-pureddit-native', preferences.appearance);
@@ -49,6 +51,8 @@ ${scope}[data-pureddit-native=old] main button {border-radius:2px!important;}
 ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px' : '12px'};}`;
     style.textContent += `${scope},${scope} body,${scope} shreddit-app,${scope} .theme-dark,${scope} .theme-light {${palette.declarations}}${palette.rules(scope)}`;
     if (classic) style.textContent += `${scope} main h1,${scope} main [slot=title]{color:${link}!important;font-size:20px!important;}`;
+    // Reading overrides also outrank the more specific native Old typography.
+    style.textContent += nativeReadingCss(`${scope}[data-pureddit-native]`,preferences.reading);
     if (!style.isConnected) document.documentElement.append(style);
     if (!panel || !panel.isConnected) {
       panel?.remove(); resize?.disconnect(); panel = document.createElement('div'); panel.id = 'pureddit-native-controls';
@@ -61,7 +65,7 @@ ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px'
         .native-feeds a {font:12px Arial,sans-serif;color:inherit;padding:7px 15px;border-radius:5px;text-decoration:none;}
         .native-feeds a:hover {background:#8882;}
         .reader[data-integrated=true] .topbar,.reader[data-integrated=true] .native-feeds {display:none!important;}
-        .reader[data-integrated=true] .view-controls {padding:8px 20px;gap:14px;min-height:48px;}
+        .reader[data-integrated=true] .view-controls {padding:8px 20px;gap:8px;min-height:48px;}
         .native-identity {display:none;font-size:15px;letter-spacing:-.4px;font-weight:700;}
         .reader[data-integrated=true] .native-identity {display:block;}
       `, actions);
@@ -119,5 +123,5 @@ ${scope} shreddit-post {border-radius:${preferences.appearance === 'old' ? '2px'
       else {let sheet=shadowStyles.get(root);if(!sheet){sheet=document.createElement('style');sheet.id='pureddit-shadow-theme';shadowStyles.set(root,sheet);}if(sheet.textContent!==shadowCss)sheet.textContent=shadowCss;if(sheet.parentNode!==root)root.append(sheet);}
     }
   }
-  return {update,clear,status,feed,applyRoots,missingStyle:(root:ShadowRoot)=>shadowStyles.has(root)&&(shadowStyles.get(root)===null?!root.adoptedStyleSheets.includes(sharedSheet!):shadowStyles.get(root)!.parentNode!==root),connected: () => Boolean(panel?.isConnected && style.isConnected)};
+  return {update,clear,status,feed,applyRoots,toolsOpen:()=>reader?.toolsOpen()||false,filters:(count:number,revealed:boolean,toggle:()=>void)=>reader?.filters(count,revealed,toggle),missingStyle:(root:ShadowRoot)=>shadowStyles.has(root)&&(shadowStyles.get(root)===null?!root.adoptedStyleSheets.includes(sharedSheet!):shadowStyles.get(root)!.parentNode!==root),connected: () => Boolean(panel?.isConnected && style.isConnected)};
 }

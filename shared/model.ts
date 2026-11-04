@@ -5,11 +5,14 @@ export type NativeAction = 'create' | 'notifications' | 'account' | 'navigation'
 export type HomeFeed = { mode: HomeMode; status: 'ready' | 'switching' | 'unavailable'; message?: string };
 export const NEWS_URL = 'https://www.reddit.com/news';
 export const HOME_URL = 'https://www.reddit.com/';
-export type Preferences = { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
+export type Distractions = { games: boolean; explore: boolean; recentPosts: boolean; recommended: boolean };
+export type ReadingPreferences = { textSize: 'default' | 'large' | 'larger'; contentWidth: 'automatic' | 'focused' | 'wide'; density: 'comfortable' | 'compact' };
+export type FeaturePreferences = { distractions: Distractions; reading: ReadingPreferences; titleFilters: string[]; keyboard: boolean };
+export type Preferences = FeaturePreferences & { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
 export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; mediaKind?: 'image' | 'video'; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
-export const VERSION = '0.3.13';
-export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [] };
+export const VERSION = '0.4.0';
+export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [], distractions: { games: false, explore: false, recentPosts: false, recommended: false }, reading: { textSize: 'default', contentWidth: 'automatic', density: 'comfortable' }, titleFilters: [], keyboard: false };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 
 export function normalizePreferences(value: unknown): Preferences {
@@ -22,7 +25,24 @@ export function normalizePreferences(value: unknown): Preferences {
     }
     return result;
   };
-  return { version: 1, enabled: object.enabled !== false, appearance: object.appearance === 'old' ? 'old' : 'modern', colorScheme: object.colorScheme === 'dark' ? 'dark' : 'light', pins: names(object.pins, 50), recent: names(object.recent, 5) };
+  const reading: Partial<ReadingPreferences> = object.reading || {}, distractions: Partial<Distractions> = object.distractions || {};
+  const titleFilters: string[] = [];
+  if (Array.isArray(object.titleFilters)) for (const entry of object.titleFilters) {
+    if (typeof entry !== 'string') continue;
+    const phrase = entry.normalize('NFKC').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 100);
+    if (phrase && !titleFilters.some(value => value.toLowerCase() === phrase.toLowerCase())) titleFilters.push(phrase);
+    if (titleFilters.length === 30) break;
+  }
+  return { version: 1, enabled: object.enabled !== false, appearance: object.appearance === 'old' ? 'old' : 'modern', colorScheme: object.colorScheme === 'dark' ? 'dark' : 'light', pins: names(object.pins, 50), recent: names(object.recent, 5),
+    distractions: { games: distractions.games === true, explore: distractions.explore === true, recentPosts: distractions.recentPosts === true, recommended: distractions.recommended === true },
+    reading: { textSize: reading.textSize === 'large' || reading.textSize === 'larger' ? reading.textSize : 'default', contentWidth: reading.contentWidth === 'focused' || reading.contentWidth === 'wide' ? reading.contentWidth : 'automatic', density: reading.density === 'compact' ? 'compact' : 'comfortable' },
+    titleFilters, keyboard: object.keyboard === true };
+}
+
+export function matchesTitle(title: string, phrases: readonly string[]) {
+  if (!phrases.length) return false;
+  const normalized = title.normalize('NFKC').toLowerCase();
+  return phrases.some(phrase => normalized.includes(phrase.toLowerCase()));
 }
 export function visit(preferences: Preferences, name: string): Preferences {
   if (!COMMUNITY.test(name) || /^(popular|all)$/i.test(name)) return preferences;

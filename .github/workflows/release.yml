@@ -1,0 +1,41 @@
+name: Prepare release packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      XDG_CONFIG_HOME: /tmp/pureddit-webext-config
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run lint:extension
+      - run: node scripts/prepare-release.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pureddit-release-candidates
+          path: dist/release/
+  safari-project:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run safari:prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pureddit-safari-xcode-source
+          path: build/safari

@@ -1,0 +1,40 @@
+name: Sign Firefox development release
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+    environment: publishing
+    timeout-minutes: 20
+    env:
+      XDG_CONFIG_HOME: /tmp/pureddit-webext-config
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm run lint:extension
+      - run: npm run release:prepare
+      - name: Sign with Mozilla (unlisted distribution)
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        shell: bash
+        run: |
+          if [[ -z "$WEB_EXT_API_KEY" || -z "$WEB_EXT_API_SECRET" ]]; then
+            echo "Create an AMO account and configure AMO_JWT_ISSUER and AMO_JWT_SECRET in the publishing environment. See docs/PUBLISHING.md." >&2
+            exit 1
+          fi
+          task_version=$(node -p "require('./package.json').version")
+          npx web-ext sign --source-dir dist/extensions/firefox --artifacts-dir dist/signed --channel unlisted --upload-source-code "dist/release/pureddit-source-${task_version}.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pureddit-signed-firefox
+          path: dist/signed/*.xpi
+          if-no-files-found: error

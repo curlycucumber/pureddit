@@ -688,3 +688,63 @@ for (const appearance of ['modern', 'old']) test(`${appearance} evicts late shad
     await expect(reader.getByRole('article')).toHaveCount(2);
   }
 });
+
+const toolsFixture = `<html><body><shreddit-app><input aria-label="Search Reddit"><aside id="left-sidebar-container"><section data-testid="games-section" id="games-panel"><h2>Games on Reddit</h2><a href="/games">Games</a></section><nav><a href="/explore" id="explore-link">Explore</a></nav><section data-testid="joined-communities" id="joined"><h2>Your communities</h2><h3>Games on Reddit</h3><a href="/r/news/">r/news</a></section><div id="shadow-sidebar"></div></aside><main><shreddit-post id="normal-tool-post" post-title="Ordinary news" subreddit-name="news" permalink="/r/news/comments/normaltools/title/"><h2>Ordinary news</h2><video id="original-player" muted></video><span id="score-text">42</span></shreddit-post><shreddit-post id="spoiler-post" post-title="Movie ending revealed" subreddit-name="movies" permalink="/r/movies/comments/spoilertools/title/"><h2>Movie ending revealed</h2></shreddit-post><shreddit-post id="tools-ad" promoted post-title="Movie ending offer" subreddit-name="ads" permalink="/r/ads/comments/adtools/title/"><h2>Movie ending offer</h2></shreddit-post><shreddit-comment><p slot="comment-body" id="comment-text">A comment about the movie ending</p><textarea aria-label="Native comment"></textarea></shreddit-comment></main><aside id="right-sidebar-container"><section id="recent-panel"><h2>Recent posts</h2></section><section id="recommended-panel"><h2>Popular communities</h2></section><section data-testid="subreddit-rules" id="rules-panel"><h2>Community rules</h2><h3>Popular communities</h3></section></aside></shreddit-app></body></html>`;
+
+test('native tools filter only feed titles, reveal without ads, preserve media, clean sidebars and restore on disable',async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:toolsFixture}));await page.goto('https://www.reddit.com/news');
+  await page.evaluate(()=>{(window as any).originalPlayer=document.getElementById('original-player');document.getElementById('shadow-sidebar')!.attachShadow({mode:'open'}).innerHTML='<section id="shadow-games"><h3>Games on Reddit</h3></section>';});
+  await inject(page);const shell=page.locator('#pureddit-native-controls');
+  await expect(page.locator('#games-panel')).toBeVisible();
+  await shell.getByRole('button',{name:'Preferences',exact:true}).click();const dialog=shell.getByRole('dialog',{name:'Make room for your feed'});
+  for(const name of ['Games','Explore','Recent posts panel','Recommended community panels'])await dialog.getByLabel(name,{exact:true}).check();
+  await dialog.getByLabel('Words or phrases to hide',{exact:true}).fill('movie ending');
+  await dialog.getByLabel('Text size',{exact:true}).selectOption('large');await dialog.getByLabel('Content width',{exact:true}).selectOption('focused');await dialog.getByLabel('Spacing',{exact:true}).selectOption('compact');
+  await dialog.getByRole('button',{name:'Save preferences',exact:true}).click();
+  for(const id of ['games-panel','explore-link','recent-panel','recommended-panel','shadow-games','spoiler-post','tools-ad'])await expect(page.locator(`#${id}`)).toBeHidden();
+  for(const id of ['joined','rules-panel','normal-tool-post','comment-text'])await expect(page.locator(`#${id}`)).toBeVisible();
+  expect(await page.locator('#original-player').evaluate(node=>node===(window as any).originalPlayer)).toBe(true);
+  await expect(page.locator('#normal-tool-post h2')).toHaveCSS('font-size','24px');await expect(page.locator('shreddit-app > main')).toHaveCSS('max-width','720px');
+  await shell.getByRole('button',{name:'1 post filtered · Show',exact:true}).click();await expect(page.locator('#spoiler-post')).toBeVisible();await expect(page.locator('#tools-ad')).toBeHidden();
+  await shell.getByRole('button',{name:'1 post revealed · Hide again',exact:true}).click();await expect(page.locator('#spoiler-post')).toBeHidden();
+  await page.locator('#normal-tool-post').evaluate(node=>{node.setAttribute('post-title','Another movie ending');});await expect(page.locator('#normal-tool-post')).toBeHidden();
+  await page.locator('#normal-tool-post').evaluate(node=>{node.setAttribute('post-title','Ordinary news again');});await expect(page.locator('#normal-tool-post')).toBeVisible();
+  await shell.getByRole('button',{name:'Community shortcuts',exact:true}).click();const menu=shell.getByRole('dialog',{name:'Your shortcuts'});
+  await menu.getByLabel('Pin a community',{exact:true}).fill('books');await menu.getByRole('button',{name:'Pin',exact:true}).click();await expect(menu.getByRole('link',{name:'r/books',exact:true})).toBeVisible();await menu.getByRole('button',{name:'Close communities',exact:true}).click();
+  await shell.getByRole('button',{name:'Old layout',exact:true}).click();const reader=page.locator('#pureddit-extension-root');
+  await expect(reader.getByRole('article')).toHaveCount(1);await expect(reader.locator('.reader')).toHaveAttribute('data-text-size','large');
+  await reader.getByRole('button',{name:'1 post filtered · Show',exact:true}).click();await expect(reader.getByRole('article')).toHaveCount(2);
+  const popup=await context.newPage();await popup.goto('https://www.reddit.com/popup.html');await popup.getByLabel('Enable reading view').uncheck();
+  for(const id of ['games-panel','explore-link','recent-panel','recommended-panel','shadow-games','spoiler-post','tools-ad'])await expect(page.locator(`#${id}`)).toBeVisible();
+  await expect(page.locator('[data-pureddit-distraction], [data-pureddit-title-filter]')).toHaveCount(0);
+});
+
+test('native title filters react to title text, skip score updates, and never filter a discussion',async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:toolsFixture}));await page.goto('https://www.reddit.com/news');
+  await page.evaluate(()=>{localStorage.setItem('pureddit.preferences.v1',JSON.stringify({titleFilters:['spoiler']}));document.getElementById('normal-tool-post')!.removeAttribute('post-title');});await inject(page);await expect(page.locator('#normal-tool-post')).toBeVisible();await page.waitForTimeout(150);
+  const scans=await page.evaluate(async()=>{let scans=0;const query=document.querySelectorAll.bind(document);document.querySelectorAll=((s:string)=>{if(s==='shreddit-post, .thing.link')scans++;return query(s);}) as typeof query;for(let i=0;i<4;i++){document.getElementById('score-text')!.firstChild!.textContent=String(i);await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);}return scans;});expect(scans).toBe(0);
+  await page.locator('#normal-tool-post h2').evaluate(node=>{node.firstChild!.textContent='A spoiler arrives';});await expect(page.locator('#normal-tool-post')).toBeHidden();
+  await page.evaluate(()=>history.pushState({},'', '/r/news/comments/normaltools/title/'));await expect(page.locator('#normal-tool-post')).toBeVisible();await expect(page.locator('#tools-ad')).toBeHidden();
+});
+
+test('native keyboard navigation preserves search, editors and modal interaction',async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:toolsFixture}));await page.goto('https://www.reddit.com/news');await page.evaluate(()=>localStorage.setItem('pureddit.preferences.v1',JSON.stringify({keyboard:true})));await inject(page);
+  await page.locator('#normal-tool-post h2').click();await page.keyboard.press('j');await expect(page.locator('#normal-tool-post')).toHaveAttribute('data-pureddit-selected','');await page.keyboard.press('j');await expect(page.locator('#spoiler-post')).toHaveAttribute('data-pureddit-selected','');
+  const search=page.getByLabel('Search Reddit',{exact:true});await search.fill('j');await search.press('k');await expect(search).toHaveValue('jk');await expect(page.locator('#spoiler-post')).toHaveAttribute('data-pureddit-selected','');
+  const editor=page.getByLabel('Native comment',{exact:true});await editor.fill('hello');await editor.press('c');await editor.press('Escape');await expect(editor).toHaveValue('helloc');await expect(page).toHaveURL('https://www.reddit.com/news');
+  const shell=page.locator('#pureddit-native-controls');await shell.getByRole('button',{name:'Preferences',exact:true}).click();await page.keyboard.press('k');await expect(page.locator('#spoiler-post')).toHaveAttribute('data-pureddit-selected','');await page.keyboard.press('Escape');await expect(shell.getByRole('dialog')).not.toBeVisible();
+  await page.evaluate(()=>{const link=document.createElement('a');link.id='native-focus-link';link.href='#native-help';link.textContent='Native help';document.body.append(link);});
+  await page.locator('#native-focus-link').focus();await page.keyboard.press('Enter');await expect(page).toHaveURL('https://www.reddit.com/news#native-help');
+  await page.evaluate(()=>{const menu=document.createElement('div');menu.setAttribute('role','listbox');menu.innerHTML='<div role="option" tabindex="0">Light</div>';document.body.append(menu);});
+  await page.getByRole('option',{name:'Light',exact:true}).focus();await page.keyboard.press('Enter');await page.keyboard.press('j');await expect(page).toHaveURL('https://www.reddit.com/news#native-help');
+  await page.getByRole('listbox').evaluate(node=>node.remove());await page.locator('#normal-tool-post h2').click();await page.keyboard.press('j');await expect(page.locator('[data-pureddit-selected]')).toHaveCount(1);
+  await shell.getByRole('button',{name:'Preferences',exact:true}).click();const prefs=shell.getByRole('dialog',{name:'Make room for your feed'});await prefs.getByLabel('Enable desktop keyboard shortcuts',{exact:true}).uncheck();await prefs.getByRole('button',{name:'Save preferences',exact:true}).click();await expect(page.locator('[data-pureddit-selected]')).toHaveCount(0);
+});
+
+test('native preferences report storage failures while retaining the working tab settings',async({context,page})=>{
+  await harness(context);await context.route('https://www.reddit.com/news',route=>route.fulfill({contentType:'text/html',body:toolsFixture}));await page.goto('https://www.reddit.com/news');
+  await page.evaluate(()=>{(window as any).browser.storage.local.set=async()=>{throw new Error('Storage unavailable');};});await inject(page);
+  const shell=page.locator('#pureddit-native-controls');await shell.getByRole('button',{name:'Preferences',exact:true}).click();const dialog=shell.getByRole('dialog',{name:'Make room for your feed'});
+  await dialog.getByLabel('Content width',{exact:true}).selectOption('focused');await dialog.getByRole('button',{name:'Save preferences',exact:true}).click();
+  await expect(page.locator('shreddit-app > main')).toHaveCSS('max-width','720px');await expect(shell.locator('.native-status')).toContainText('browser storage could not save');
+});

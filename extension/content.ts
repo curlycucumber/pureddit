@@ -3,11 +3,13 @@ import { NativeTabs } from './native-tabs';
 import { RootRegistry } from './roots';
 import { extractPosts } from '../shared/extract';
 import { mountReader } from '../shared/reader';
-import { DEFAULTS, HOME_URL, NEWS_URL, normalizePreferences, pageFromUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
+import { DEFAULTS, HOME_URL, NEWS_URL, normalizePreferences, pageFromUrl, postUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
 import { advertisementCards, isAdDisclosureMutation, isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
 import { HomeFeedController, nativeControl, nativeLink, cardSnapshot } from './native';
 import { nativeAppearance, nativePage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
+import { DistractionFilter, TitleFilter, titleMutation, distractionMutation } from './enhancements';
+import { keyboardNavigation } from '../shared/keyboard';
 declare const __PUREDDIT_THEME__: string;
 
 // Read feeds and style Reddit's native interactive pages. No fetch/XHR, credentials, API calls,
@@ -37,9 +39,13 @@ async function start() {
   const nativeTabs = new NativeTabs();
   const homeController = new HomeFeedController();
   let nativeActive = false;
-  const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void changeColorScheme(value); }, pin: () => {}, unpin: () => {}, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
+  const distractions = new DistractionFilter(), titles = new TitleFilter();
+  const featureActions = { preferences: (value: Pick<Preferences,'reading'|'distractions'|'titleFilters'|'keyboard'>) => { void save({ ...preferences, reading:value.reading, distractions:value.distractions, titleFilters:value.titleFilters, keyboard:value.keyboard }); },
+    pin: (name:string) => { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) void save({ ...preferences, pins:[...preferences.pins,name] }); },
+    unpin: (name:string) => { void save({ ...preferences,pins:preferences.pins.filter(item=>item!==name) }); } };
+  const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {...featureActions, original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void changeColorScheme(value); }, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
   function skin(enabled: boolean) {
-    const key = enabled ? `${preferences.appearance}:${preferences.colorScheme}:${Boolean(document.querySelector('shreddit-app'))}` : '';
+    const key = enabled ? JSON.stringify([preferences,Boolean(document.querySelector('shreddit-app'))]) : '';
     if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
     if (enabled) nativeSkin.update(preferences); else nativeSkin.clear();
   }
@@ -51,7 +57,7 @@ async function start() {
   let cacheKey = ''; const postCache = new Map<string, Post>();
   const adStyle = document.createElement('style'); adStyle.id = 'pureddit-native-ad-style';
   // Cosmetic ad hiding also applies when the original native feed is visible.
-  adStyle.textContent = '[data-pureddit-filtered],[data-pureddit-ad]{display:none!important}' + AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
+  adStyle.textContent = '[data-pureddit-filtered],[data-pureddit-ad],[data-pureddit-title-filter],[data-pureddit-distraction]{display:none!important}[data-pureddit-selected]{outline:2px solid #5f99cf!important;outline-offset:-2px;}' + AD_SELECTOR.split(',').map(selector => `html[data-pureddit-feed] ${selector}`).join(',') + '{display:none!important}';
   function adFiltering(enabled: boolean, roots: Array<Document | ShadowRoot> = []) {
     if (enabled) {
       const ads = advertisementCards(roots);
@@ -61,7 +67,7 @@ async function start() {
       if (!adStyle.isConnected) document.documentElement.append(adStyle); document.documentElement.setAttribute('data-pureddit-feed', '');
     for (const root of roots) if (root instanceof ShadowRoot) {
         let style = nativeStyles.get(root);
-        if (!style) { style = document.createElement('style'); style.textContent = '[data-pureddit-filtered],[data-pureddit-ad]{display:none!important}' + AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
+        if (!style) { style = document.createElement('style'); style.textContent = '[data-pureddit-filtered],[data-pureddit-ad],[data-pureddit-title-filter],[data-pureddit-distraction]{display:none!important}[data-pureddit-selected]{outline:2px solid #5f99cf!important;outline-offset:-2px;}' + AD_SELECTOR + '{display:none!important}'; nativeStyles.set(root, style); }
         if (style.parentNode !== root) root.append(style);
       }
       for (const [root, style] of nativeStyles) if (!root.host.isConnected) { style.remove(); nativeStyles.delete(root); }
@@ -75,7 +81,10 @@ async function start() {
   };
   async function save(next: Preferences) {
     preferences = normalizePreferences(next); refresh();
-    try { await savePreferences(preferences); } catch { ui?.message('Preferences changed for this tab, but browser storage could not save them.'); }
+    try { await savePreferences(preferences); } catch {
+      const message='Preferences changed for this tab, but browser storage could not save them.';
+      if(nativeSkin.connected())nativeSkin.status(message);else ui?.message(message);
+    }
   }
   async function changeColorScheme(value: Preferences['colorScheme']) {
     const request=++colorRequest;
@@ -143,6 +152,7 @@ async function start() {
     const visibility = () => { if (host) host.style.display = host.hidden ? 'none' : 'block'; };
     const root = host.attachShadow({ mode: 'open' });
     ui = mountReader(root, __PUREDDIT_THEME__, {
+      ...featureActions,
       original: () => { showOriginal(); visibility(); },
       navigate,
       native,
@@ -159,8 +169,6 @@ async function start() {
       },
       appearance: value => { void save({ ...preferences, appearance: value }); },
       colorScheme: value => { void changeColorScheme(value); },
-      pin: name => { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) void save({ ...preferences, pins: [...preferences.pins, name] }); },
-      unpin: name => { void save({ ...preferences, pins: preferences.pins.filter(item => item !== name) }); },
     });
     document.body.append(host);
     ensureToggle();
@@ -205,8 +213,12 @@ async function start() {
     if ([...observed].some(root => !root.host.isConnected)) { observer.disconnect(); observer.observe(document.documentElement, observation); observed = new Set(); }
     for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
     adFiltering(preferences.enabled && Boolean(page || nativePage(location.href)), roots);
+    if (preferences.enabled && (page || nativePage(location.href)) && !suppressed) distractions.apply(roots,preferences.distractions); else distractions.clear();
+    if (!liveModern) titles.clear();
+    if (!preferences.enabled || !preferences.keyboard || !page) shortcuts.clear();
+    if (!preferences.enabled || !page) { nativeSkin.filters(0,false,()=>{}); if (!preferences.enabled) titles.reset(); }
     if (!preferences.enabled || !page) {
-      clearNativeFilters(); restore(); host?.remove();
+      clearNativeFilters(); restore(); ui?.closeTools();host?.remove();
       if (!preferences.enabled || !nativePage(location.href) || !suppressed) { toggle?.remove(); toggle = undefined; } else { ensureToggle(); toggle!.hidden = false; }
       host = undefined; ui = undefined; homeFeed = undefined; postCache.clear(); rendered = ''; clearTimeout(emptyTimer); emptyTimer = 0; emptySince = 0; return;
     }
@@ -221,12 +233,16 @@ async function start() {
       if (toggle) toggle.hidden = true;
       const stale = page.kind === 'home' && homeMode === 'following' ? new Set(homeController.staleCards(roots)) : new Set<Element>();
       const flagged = new Set<Element>();
+      const filterCandidates: Element[] = [];
       for (const root of roots) for (const card of root.querySelectorAll('shreddit-post, .thing.link')) {
         if (nativeAds.has(card) || isAdvertisement(card) || page.kind === 'home' && (homeFeed?.status !== 'ready' || stale.has(card) || homeMode === 'following' && isRecommendation(card))) flagged.add(card);
+        else if (preferences.titleFilters.length && !card.closest('[hidden]')) filterCandidates.push(card);
       }
       for (const card of filteredNative) if (!flagged.has(card)) card.removeAttribute('data-pureddit-filtered');
       for (const card of flagged) if (!card.hasAttribute('data-pureddit-filtered')) card.setAttribute('data-pureddit-filtered','');
       filteredNative.clear(); for (const card of flagged) filteredNative.add(card);
+      const titleCount = titles.apply(filterCandidates,preferences.titleFilters,`${location.href}:${homeMode}`);
+      nativeSkin.filters(titleCount,titles.revealed,()=>{titles.toggle();refresh();});
       nativeSkin.feed(page, homeFeed, value => { if (homeMode !== value) { homeMode = value; homeController.reset(); } refresh(); });
       return;
     }
@@ -275,6 +291,29 @@ async function start() {
   let frame = 0;
   const flush = () => { cancelAnimationFrame(frame); clearTimeout(timer); frame = 0; timer = 0; refresh(); };
   const schedule = () => { if (document.hidden) return; if (!timer) { timer = window.setTimeout(flush, 80); if (!document.hidden) frame = requestAnimationFrame(flush); } };
+  let keyboardReturn = '';
+  const shortcuts = keyboardNavigation(document, {
+    enabled: () => preferences.enabled && preferences.keyboard && !suppressed && matchMedia('(min-width:768px) and (pointer:fine)').matches,
+    blocked: () => Boolean(nativeSkin.toolsOpen() || ui?.toolsOpen() || rootsNow().some(root=>[...root.querySelectorAll('dialog[open], [role=dialog], [role=menu], [role=listbox]')].some(node=>node.getClientRects().length>0))),
+    posts: () => {
+      const root = host && !host.hidden ? host.shadowRoot : undefined;
+      if (root) return [...root.querySelectorAll<HTMLElement>('.post')].map(element => {
+        const open = () => { keyboardReturn=location.href;element.querySelector<HTMLAnchorElement>('.post-title')?.click(); };
+        return {element,open,comments:()=>{keyboardReturn=location.href;element.querySelector<HTMLAnchorElement>('.comment-pill')?.click();}};
+      });
+      if (!liveNative || !pageFromUrl(location.href)) return [];
+      return rootsNow().flatMap(root=>[...root.querySelectorAll<HTMLElement>('shreddit-post, .thing.link')]).flatMap(element=>{
+        const href=postUrl(element.getAttribute('permalink')||element.getAttribute('data-permalink')||element.querySelector('a[slot=full-post-link], a.comments, a[href*="/comments/"]')?.getAttribute('href')||'');
+        if(!href)return [];
+        const open=()=>{keyboardReturn=location.href;navigate(href);};
+        return [{element,open,comments:()=>{keyboardReturn=location.href;navigate(`${href}#comments`);}}];
+      });
+    },
+    back: () => {
+      if (!keyboardReturn || !postUrl(location.href) || rootsNow().some(root=>[...root.querySelectorAll('dialog[open], [role=dialog], [role=menu]')].some(node=>node.getClientRects().length>0))) return false;
+      const url=keyboardReturn;keyboardReturn='';navigate(url);return true;
+    },
+  });
   const observer = new MutationObserver(records => {
     if (!preferences.enabled) return;
     let relevant = false;
@@ -292,9 +331,9 @@ async function start() {
         const card = ancestor.closest('shreddit-post, .thing.link'); if (card) { parsedPosts.delete(card); touchedCard = true; }
         const owner = ancestor.getRootNode(); ancestor = owner instanceof ShadowRoot ? owner.host : null;
       }
-      if (record.type === 'characterData') { if (!liveNative && touchedCard || target && isAdDisclosureMutation(target) || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
+      if (record.type === 'characterData') { if (!liveNative && touchedCard || target && (isAdDisclosureMutation(target) || touchedCard && preferences.titleFilters.length && titleMutation(target) || Object.values(preferences.distractions).some(Boolean) && distractionMutation(target)) || target?.closest('[role=tab], [role=tablist]')) relevant = true; }
       else if (record.type === 'attributes') {
-        if (liveNative && touchedCard && !['class', 'hidden', 'slot', 'href', 'aria-label', 'data-ad-click-location', 'data-ad-click-action', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'is-recommended', 'data-recommended', 'recommendation-reason', 'data-testid'].includes(record.attributeName || '')) continue;
+        if (liveNative && touchedCard && !['class', 'hidden', 'slot', 'href', 'aria-label', 'data-ad-click-location', 'data-ad-click-action', ...(preferences.titleFilters.length ? ['post-title'] : []), 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'is-recommended', 'data-recommended', 'recommendation-reason', 'data-testid'].includes(record.attributeName || '')) continue;
         if (record.attributeName !== 'class' || target?.matches('[role=tab], .thing') || target?.closest('shreddit-post, .thing.link')) relevant = true;
       } else {
         const owner = record.target.getRootNode();
@@ -339,7 +378,7 @@ async function start() {
       preferences = next; refresh();
     }
   });
-  window.addEventListener('pagehide', event => { if (!event.persisted) { observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); displayMode.cancel(); cancelNavigation(); nativeTabs.clear(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
+  window.addEventListener('pagehide', event => { if (!event.persisted) { shortcuts.destroy();distractions.clear();titles.reset();ui?.closeTools();observer.disconnect(); clearInterval(poll); clearTimeout(timer); cancelAnimationFrame(frame); clearTimeout(emptyTimer); displayMode.cancel(); cancelNavigation(); nativeTabs.clear(); clearNativeFilters(); restore(); adFiltering(false); nativeSkin.clear(); } });
   lastUrl = location.href; refresh();
 }
 if (document.body) void start();
