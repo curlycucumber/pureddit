@@ -13,7 +13,7 @@ test('release candidates have valid checksums, matching versions, and review sou
   const checksums=(await readFile('dist/release/SHA256SUMS','utf8')).trim().split('\n');assert.equal(checksums.length,4);
   for(const line of checksums){const [hash,name]=line.split('  ');const data=await readFile(`dist/release/${name}`);assert.equal(createHash('sha256').update(data).digest('hex'),hash);const archive=unzipSync(data);
     if(name.startsWith('pureddit-source-')){
-      for(const file of ['shared/tools.ts','extension/enhancements.ts','scripts/build-extensions.mjs','public/privacy.html','docs/PUBLISHING.md','package-lock.json','SOURCE_FILES.json'])assert.ok(archive[file],`review source includes ${file}`);
+      for(const file of ['shared/tools.ts','shared/votes.ts','extension/enhancements.ts','extension/classic-discussion.ts','extension/voting.ts','scripts/build-extensions.mjs','public/privacy.html','docs/PUBLISHING.md','package-lock.json','SOURCE_FILES.json'])assert.ok(archive[file],`review source includes ${file}`);
       assert.ok(Object.keys(archive).every(file=>!file.startsWith('dist/')&&!file.startsWith('node_modules/')&&!file.startsWith('build/')&&!file.startsWith('.env')));
       const review=await mkdtemp(path.join(tmpdir(),'pureddit-review-'));
       try {

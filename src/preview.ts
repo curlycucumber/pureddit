@@ -36,6 +36,7 @@ let openComments = false;
 shadow.addEventListener('click', event => { openComments = event.composedPath().some(element => element instanceof Element && element.classList.contains('comment-pill')); }, true);
 function persist() { try { localStorage.setItem(KEY, JSON.stringify(preferences)); } catch { reader.message('Preview preferences could not be saved in this browser.'); } }
 const reader = mountReader(shadow, theme + discussionTheme, {
+  vote(post,direction) { let state=sessions.get(post.href);if(!state){state=createDiscussionState();sessions.set(post.href,state);}const value=direction==='up'?1:-1;state.vote=state.vote===value?0:value;render();reader.message('Vote changed in this preview only.'); },
   preferences(value) { preferences = normalizePreferences({ ...preferences, reading:value.reading, distractions:value.distractions, titleFilters:value.titleFilters, keyboard:value.keyboard }); persist();render(); },
   preview: true,
   more() { reader.message('The installed extension asks Reddit’s native feed to load more posts. This preview has sample content only.'); },
@@ -135,6 +136,7 @@ function render() {
   const extracted = extractPosts(fixture, location.href, { includeRecommendations: page.kind === 'home' && homeMode === 'for-you' });
   const local = ownPosts.filter(post => page.kind === 'home' || page.kind === 'popular' || post.community.toLowerCase() === page.community?.toLowerCase()).map(post => ({ ...post, comments: String(discussionCount(sessions.get(post.href)!)) }));
   extracted.posts.unshift(...local);
+  extracted.posts=extracted.posts.map(post=>{const state=sessions.get(post.href);return state?{...post,score:String((Number((post.score||'0').replaceAll(',',''))||0)+state.vote),vote:state.vote===1?'up':state.vote===-1?'down':undefined}:post;});
   reader.update({ ...extracted, page, preferences, preview: true, homeFeed: page.kind === 'home' ? { mode: homeMode, status: 'ready' } : undefined });
   document.querySelector('#address')!.textContent = activePost ? `reddit.com${new URL(activePost.href).pathname}` : page.kind === 'home' ? 'reddit.com' : page.kind === 'news' ? 'reddit.com/news' : communityUrl(page.community!).replace('https://www.', '').replace(/\/$/, '');
   // Default new-tab/copy-link actions should also point at the local preview.

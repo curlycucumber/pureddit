@@ -1,5 +1,6 @@
 import { externalUrl, postUrl, type Post } from './model';
 import { isAdvertisement, isRecommendation } from './feed';
+import { readVote } from './votes';
 
 export type Extraction = { posts: Post[]; filtered: number; excluded: string[]; layout: 'modern' | 'old' | 'unsupported' };
 const text = (value: string | null | undefined) => (value || '').replace(/\s+/g, ' ').trim();
@@ -28,7 +29,7 @@ function createdAt(element: Element) {
   const date = new Date(numeric === undefined ? raw : numeric < 1e12 ? numeric * 1000 : numeric);
   if (Number.isFinite(date.getTime())) return date.toISOString();
 }
-export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element>; cache?: WeakMap<Element, Post>; advertisements?: ReadonlySet<Element> } = {}): Extraction {
+export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', options: { includeRecommendations?: boolean; excludeElements?: ReadonlySet<Element>; cache?: WeakMap<Element, Post>; advertisements?: ReadonlySet<Element>; voteRoots?: ReadonlyMap<Element,ParentNode[]> } = {}): Extraction {
   const modern = [...root.querySelectorAll('shreddit-post')];
   const old = [...root.querySelectorAll('.thing.link')];
   const layout = modern.length ? 'modern' : old.length ? 'old' : 'unsupported';
@@ -44,9 +45,11 @@ export function extractPosts(root: ParentNode, base = 'https://www.reddit.com', 
     const community = text(element.getAttribute('subreddit-prefixed-name') || element.getAttribute('subreddit-name') || element.getAttribute('data-subreddit')).replace(/^r\//, '');
     if (!title || !href || !community || seen.has(href)) continue;
     seen.add(href);
-    const post: Post = { id: element.getAttribute('id') || element.getAttribute('data-fullname') || href, title, community, href,
+    const vote=readVote(element,options.voteRoots?.get(element)|| (element.shadowRoot?[element.shadowRoot]:[]));
+    const legacyScore=element.querySelector(vote==='up'?'.score.likes':vote==='down'?'.score.dislikes':'.score.unvoted')?.textContent;
+    const post: Post = { id: element.getAttribute('id') || element.getAttribute('data-fullname') || href, title, community, href, vote,
       author: text(element.getAttribute('author') || element.querySelector('a.author')?.textContent) || undefined,
-      score: text(element.getAttribute('score') || element.querySelector('.score.unvoted, .score')?.textContent) || undefined,
+      score: text(element.getAttribute('score') || legacyScore || element.querySelector('.score')?.textContent) || undefined,
       comments: text(element.getAttribute('comment-count') || element.querySelector('a.comments')?.textContent).replace(/\s*comments?$/i, '') || undefined,
       mediaKind: /^(image|gallery)$/.test(element.getAttribute('post-type') || element.getAttribute('data-post-type') || '') ? 'image' : (element.getAttribute('post-type') || element.getAttribute('data-post-type')) === 'video' ? 'video' : undefined,
       thumbnail: thumbnail(element, base),

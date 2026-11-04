@@ -93,9 +93,9 @@ The shared Safari source and converter command are prepared here; this Linux wor
 - Toggle the extension off; original content, focusability, and scrolling must be restored.
 - Check iPhone portrait/landscape and keyboard behavior. If Reddit changes its DOM, disable Pureddit and report the layout/URL without sharing private page content or credentials.
 
-### Updating Chrome to 0.4.0
+### Updating Chrome to 0.4.1
 
-Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.4.0** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
+Download and extract the new Chrome ZIP into your existing extension folder (preserve its path). At `chrome://extensions`, click Pureddit’s reload button, then refresh Reddit tabs. Confirm version **0.4.1** is shown. GitHub/Vercel updates do not automatically update an unpacked extension.
 
 Version 0.3.4 adds native-page appearance on discussions, profiles, notifications and post composers, recognizes Reddit’s `faceplate-tab-selected` / `tab-selected` Home tabs, and avoids rebuilding unchanged feed cards. Home still requires explicit native tab selection and updated content; if your Reddit variant is not recognized, report the Following tab markup rather than treating suggested posts as followed content.
 
@@ -128,3 +128,9 @@ Update/reload your development extension as above and confirm **0.4.0**. The new
 Test each distraction option against Reddit's sidebar; joined communities and subreddit rules should remain visible. Set a title phrase, reveal the filtered posts, and verify ads stay hidden. Enter a discussion and confirm title filtering does not hide the opened post/comments. Check reading size/width/spacing, shortcut search and pinning, and desktop J/K/Enter/O/C/Escape navigation with editors/search focused. Reset new preferences and disable the extension to verify restoration. Sidebar cleanup depends on supported native markup and does not promise recognition of future Reddit panels.
 
 For signed installations and TestFlight, follow [Publishing Pureddit](PUBLISHING.md). No publisher accounts or live store listings are configured yet; source ZIPs remain development packages.
+
+## Classic post pages and votes in 0.4.1
+
+Update/reload to **0.4.1** and refresh Reddit. In Old, open an article/image post and check that the complete source preview and Open button stay above the action row. Check desktop and phone widths, light/dark, native comment typography, and drafts/collapse state across Modern/Old switches. The native navigation, rules sidebar, account controls and media remain functional; layout changes do not replace those nodes.
+
+On an Old feed, upvote, change to downvote and click the selected arrow again to clear it. Scores and orange/blue selection should follow Reddit's actual control. Voting still requires Reddit to allow the action. If the post was virtualized away or the control has not loaded, open the discussion/Show Reddit; if Reddit opens sign-in or an error, Pureddit exposes it. There is no simulated signed-in vote or direct account API client. The Vercel sample arrows only modify the local demo.

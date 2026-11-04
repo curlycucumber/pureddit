@@ -92,3 +92,13 @@ for(const appearance of ['modern','old']) for(const theme of ['light','dark']) t
   expect((await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze()).violations).toEqual([]);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });
+
+test('Old preview feed arrows share their local vote state with the discussion',async({page})=>{
+  await page.goto('/');const reader=page.locator('#reader-host');await reader.getByRole('button',{name:'Old layout',exact:true}).click();
+  const post=reader.getByRole('article').first(),up=post.getByRole('button',{name:'Upvote post',exact:true}),down=post.getByRole('button',{name:'Downvote post',exact:true});
+  const original=Number((await post.locator('.score-number').textContent())!.replaceAll(',',''));
+  await up.click();await expect(up).toHaveAttribute('aria-pressed','true');await expect(post.locator('.score-number')).toHaveText(String(original+1));
+  await down.click();await expect(down).toHaveAttribute('aria-pressed','true');await expect(post.locator('.score-number')).toHaveText(String(original-1));
+  await post.locator('.post-title').click();await expect(reader.locator('.discussion-vote[aria-label="Downvote post"]')).toHaveAttribute('aria-pressed','true');await reader.getByRole('button',{name:'Back to feed',exact:true}).click();await expect(down).toHaveAttribute('aria-pressed','true');
+  await down.click();await expect(down).toHaveAttribute('aria-pressed','false');await expect(post.locator('.score-number')).toHaveText(String(original));
+});

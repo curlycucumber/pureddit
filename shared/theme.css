@@ -506,3 +506,19 @@ main{overflow:auto;min-width:0;padding:28px 30px;background:#fff;outline:none}.h
   .reader[data-text-size=large] .post h2 { font-size:20px!important; }
   .reader[data-text-size=larger] .post h2 { font-size:23px!important; }
 }
+
+/* Classic feed arrows activate Reddit's own vote controls. */
+.score-column .score-arrow{display:grid;place-items:center;width:28px;height:22px;min-height:22px;padding:0;border:0;background:transparent;border-radius:3px;color:inherit;}
+.score-column .score-arrow::before{content:"";display:block;width:0;height:0;border:6px solid transparent;}
+.score-column .score-arrow.up::before{border-top:0;border-bottom:8px solid #a1a1a1;}
+.score-column .score-arrow.down::before{border-bottom:0;border-top:8px solid #a1a1a1;}
+.score-column .score-arrow:hover{background:#80808020;}
+.score-column .score-arrow.up[aria-pressed=true]::before{border-bottom-color:#b13c0d;}
+.score-column .score-arrow.down[aria-pressed=true]::before{border-top-color:#245bad;}
+.score-column[data-vote=up] .score-number{color:#b13c0d;}
+.score-column[data-vote=down] .score-number{color:#245bad;}
+.reader[data-theme=dark] .score-column[data-vote=up] .score-number{color:#ff8b57;}
+.reader[data-theme=dark] .score-column[data-vote=down] .score-number{color:#80a7ff;}
+.reader[data-theme=dark] .score-arrow.up[aria-pressed=true]::before{border-bottom-color:#ff8b57;}
+.reader[data-theme=dark] .score-arrow.down[aria-pressed=true]::before{border-top-color:#80a7ff;}
+@media(pointer:coarse){.score-column .score-arrow{height:28px;min-height:28px;}}

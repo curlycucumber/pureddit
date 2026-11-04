@@ -1,5 +1,6 @@
 export type Appearance = 'modern' | 'old';
 export type ColorScheme = 'light' | 'dark';
+export type Vote = 'up' | 'down';
 export type HomeMode = 'following' | 'for-you';
 export type NativeAction = 'create' | 'notifications' | 'account' | 'navigation';
 export type HomeFeed = { mode: HomeMode; status: 'ready' | 'switching' | 'unavailable'; message?: string };
@@ -10,8 +11,8 @@ export type ReadingPreferences = { textSize: 'default' | 'large' | 'larger'; con
 export type FeaturePreferences = { distractions: Distractions; reading: ReadingPreferences; titleFilters: string[]; keyboard: boolean };
 export type Preferences = FeaturePreferences & { version: 1; enabled: boolean; appearance: Appearance; colorScheme: ColorScheme; pins: string[]; recent: string[] };
 export type Page = { kind: 'home' | 'popular' | 'news' | 'community'; title: string; community?: string; sort: 'new' | 'hot' | 'top' | 'best' };
-export type Post = { id: string; title: string; community: string; author?: string; score?: string; comments?: string; mediaKind?: 'image' | 'video'; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
-export const VERSION = '0.4.0';
+export type Post = { id: string; title: string; community: string; author?: string; score?: string; vote?: Vote; comments?: string; mediaKind?: 'image' | 'video'; thumbnail?: string; communityIcon?: string; createdAt?: string; externalUrl?: string; href: string };
+export const VERSION = '0.4.1';
 export const DEFAULTS: Preferences = { version: 1, enabled: true, appearance: 'modern', colorScheme: 'light', pins: [], recent: [], distractions: { games: false, explore: false, recentPosts: false, recommended: false }, reading: { textSize: 'default', contentWidth: 'automatic', density: 'comfortable' }, titleFilters: [], keyboard: false };
 export const COMMUNITY = /^[A-Za-z0-9_]{2,21}$/;
 

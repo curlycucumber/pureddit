@@ -1,9 +1,9 @@
-import { communityUrl, COMMUNITY, HOME_URL, NEWS_URL, sortUrl, VERSION, matchesTitle, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences } from './model';
+import { communityUrl, COMMUNITY, HOME_URL, NEWS_URL, sortUrl, VERSION, matchesTitle, type Appearance, type ColorScheme, type HomeFeed, type HomeMode, type NativeAction, type Page, type Post, type Preferences, type Vote } from './model';
 import type { Extraction } from './extract';
 import { mountTools, type ToolActions } from './tools';
 
 export type ReaderModel = Extraction & { page: Page; preferences: Preferences; preview: boolean; homeFeed?: HomeFeed };
-export type ReaderActions = ToolActions & { original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; colorScheme: (value: ColorScheme) => void; native: (action: NativeAction) => void; homeMode: (value: HomeMode) => void; more: () => void; preview?: boolean };
+export type ReaderActions = ToolActions & { vote: (post: Post, direction: Vote) => void; original: () => void; navigate: (url: string) => void; pin: (name: string) => void; unpin: (name: string) => void; appearance: (value: Appearance) => void; colorScheme: (value: ColorScheme) => void; native: (action: NativeAction) => void; homeMode: (value: HomeMode) => void; more: () => void; preview?: boolean };
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, content?: string) {
   const node = document.createElement(tag); node.className = className; if (content !== undefined) node.textContent = content; return node;
 }
@@ -188,6 +188,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
         posts.forEach((post,index) => {
           const signature = JSON.stringify(post), previous = cards.get(post.href);
           let card = previous?.element;
+          const voteFocus=previous?.element.contains(root.activeElement)&&root.activeElement?.matches('.score-arrow') ? (root.activeElement.classList.contains('up')?'up':'down') : undefined;
           if (!previous || previous.signature !== signature) {
             card = postCard(post, actions, index + 1, message);
             if (previous) { if (cursor === previous.element) cursor = card; previous.element.replaceWith(card); }
@@ -195,6 +196,7 @@ export function mountReader(root: ShadowRoot, css: string, actions: ReaderAction
           } else { const rank = card!.querySelector('.rank')!; if (rank.textContent !== String(index + 1)) rank.textContent = String(index + 1); }
           if (card !== cursor) list.insertBefore(card!,cursor);
           cursor = card!.nextSibling;
+          if(voteFocus)card!.querySelector<HTMLButtonElement>(`.score-arrow.${voteFocus}`)?.focus({preventScroll:true});
         });
         if (!posts.length) {
           list.replaceChildren();
@@ -216,9 +218,9 @@ function postCard(post: Post, actions: ReaderActions, rank: number, message: (te
   article.dataset.media = post.thumbnail ? 'image' : 'none';
   const number = element('span', 'rank', String(rank)); number.setAttribute('aria-hidden', 'true');
   const score = element('div', 'score-column');
-  score.title = 'Score from Reddit. Use Show Reddit to vote.';
-  const up = element('span', 'score-arrow up'), down = element('span', 'score-arrow down');
-  up.setAttribute('aria-hidden', 'true'); down.setAttribute('aria-hidden', 'true');
+  score.dataset.vote=post.vote||'';
+  const up = element('button', 'score-arrow up'), down = element('button', 'score-arrow down');
+  for(const [button,direction] of [[up,'up'],[down,'down']] as const){button.type='button';button.setAttribute('aria-label',direction==='up'?'Upvote post':'Downvote post');button.setAttribute('aria-pressed',String(post.vote===direction));button.title=direction==='up'?'Upvote':'Downvote';button.addEventListener('click',()=>actions.vote(post,direction));}
   const points = element('span', 'score-number', post.score || '·');
   points.setAttribute('aria-label', post.score ? `${post.score} points` : 'Score unavailable');
   score.append(up, points, down);

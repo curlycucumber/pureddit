@@ -6,10 +6,12 @@ import { mountReader } from '../shared/reader';
 import { DEFAULTS, HOME_URL, NEWS_URL, normalizePreferences, pageFromUrl, postUrl, visit, type HomeMode, type HomeFeed, type NativeAction, type Post, type Preferences } from '../shared/model';
 import { advertisementCards, isAdDisclosureMutation, isAdvertisement, isRecommendation, AD_SELECTOR } from '../shared/feed';
 import { HomeFeedController, nativeControl, nativeLink, cardSnapshot } from './native';
-import { nativeAppearance, nativePage } from './native-appearance';
+import { nativeAppearance, nativePage, discussionPage } from './native-appearance';
 import { extensionApi, KEY, loadPreferences, savePreferences } from './storage';
 import { DistractionFilter, TitleFilter, titleMutation, distractionMutation } from './enhancements';
 import { keyboardNavigation } from '../shared/keyboard';
+import { nativeVote } from './voting';
+import { indexVoteRoots, voteOwner } from '../shared/votes';
 declare const __PUREDDIT_THEME__: string;
 
 // Read feeds and style Reddit's native interactive pages. No fetch/XHR, credentials, API calls,
@@ -39,13 +41,22 @@ async function start() {
   const nativeTabs = new NativeTabs();
   const homeController = new HomeFeedController();
   let nativeActive = false;
+  let voteUntil=0;let previousVoteFeedback=new Set<Element>();
+  const voteFeedbackSelector='dialog[open], faceplate-dialog[open], [role=dialog], [role=alert]';
+  const visibleFeedback=(roots:Array<Document|ShadowRoot>)=>roots.flatMap(root=>[...root.querySelectorAll<HTMLElement>(voteFeedbackSelector)]).filter(node=>node.getClientRects().length>0&&getComputedStyle(node).visibility!=='hidden'&&(node.getAttribute('role')!=='alert'||/error|fail|unable|couldn.?t|not (?:allowed|permitted)|sign.?in|log.?in|try again|rate.?limit|went wrong|unavailable/i.test(node.textContent||'')));
+  function voteFromReader(post: Post,direction: 'up'|'down'){
+    cachedRoots=discovery().snapshot();rootsDirty=false;previousVoteFeedback=new Set(visibleFeedback(cachedRoots));voteUntil=Date.now()+5000;
+    const result=nativeVote(post,direction,cachedRoots,restore);
+    if(result!=='clicked'){voteUntil=0;ui?.message(result==='disabled'?'Reddit has disabled voting on this post. Use Show Reddit to check its voting controls.':'Reddit’s vote control is not loaded for this post. Open its discussion or use Show Reddit to vote.');return;}
+    refresh();
+  }
   const distractions = new DistractionFilter(), titles = new TitleFilter();
-  const featureActions = { preferences: (value: Pick<Preferences,'reading'|'distractions'|'titleFilters'|'keyboard'>) => { void save({ ...preferences, reading:value.reading, distractions:value.distractions, titleFilters:value.titleFilters, keyboard:value.keyboard }); },
+  const featureActions = { vote:voteFromReader, preferences: (value: Pick<Preferences,'reading'|'distractions'|'titleFilters'|'keyboard'>) => { void save({ ...preferences, reading:value.reading, distractions:value.distractions, titleFilters:value.titleFilters, keyboard:value.keyboard }); },
     pin: (name:string) => { if (!preferences.pins.some(item => item.toLowerCase() === name.toLowerCase()) && preferences.pins.length < 50) void save({ ...preferences, pins:[...preferences.pins,name] }); },
     unpin: (name:string) => { void save({ ...preferences,pins:preferences.pins.filter(item=>item!==name) }); } };
   const nativeSkin = nativeAppearance(__PUREDDIT_THEME__, {...featureActions, original: () => { nativeActive = false; nativeSkin.clear(); skinKey = ''; showOriginal(); }, navigate, native, appearance: value => { void save({...preferences,appearance:value}); }, colorScheme: value => { void changeColorScheme(value); }, homeMode: () => {}, more: () => {}}); let rendered = ''; let skinKey = '';
   function skin(enabled: boolean) {
-    const key = enabled ? JSON.stringify([preferences,Boolean(document.querySelector('shreddit-app'))]) : '';
+    const key = enabled ? JSON.stringify([preferences,Boolean(document.querySelector('shreddit-app')),discussionPage(location.href)]) : '';
     if (key === skinKey && (!enabled || nativeSkin.connected())) return; skinKey = key;
     if (enabled) nativeSkin.update(preferences); else nativeSkin.clear();
   }
@@ -194,6 +205,7 @@ async function start() {
     if (location.href !== lastUrl) {
       const previousUrl = lastUrl, requested = Boolean(pendingUrl);
       cancelNavigation(); lastUrl = location.href; suppressed = false; nativeActive = false; loadingFallback = false; emptySince = 0; homeController.reset();
+      voteUntil=0;previousVoteFeedback.clear();
       if (pageFromUrl(location.href)?.kind === 'home') homeMode = 'following';
       rootsDirty = true;
       routeCards = pageFromUrl(previousUrl) && pageFromUrl(location.href) ? (requested ? routeCards : lastCards) : new Map();
@@ -211,8 +223,9 @@ async function start() {
     if (preferences.enabled && nativeSkin.connected()) nativeSkin.applyRoots(roots);
     if (!liveModern) nativeSkin.feed(null, undefined, () => {});
     if ([...observed].some(root => !root.host.isConnected)) { observer.disconnect(); observer.observe(document.documentElement, observation); observed = new Set(); }
-    for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root); }
+    for (const root of roots) if (root instanceof ShadowRoot && !observed.has(root)) { observer.observe(root, observation); observed.add(root);const owner=voteOwner(root.host);if(owner)parsedPosts.delete(owner); }
     adFiltering(preferences.enabled && Boolean(page || nativePage(location.href)), roots);
+    if(preferences.enabled&&voteUntil>Date.now()&&visibleFeedback(roots).some(node=>!previousVoteFeedback.has(node))){voteUntil=0;nativeActive=true;showOriginal();return;}
     if (preferences.enabled && (page || nativePage(location.href)) && !suppressed) distractions.apply(roots,preferences.distractions); else distractions.clear();
     if (!liveModern) titles.clear();
     if (!preferences.enabled || !preferences.keyboard || !page) shortcuts.clear();
@@ -262,7 +275,7 @@ async function start() {
     const unchanged = new Set([...currentCards].filter(([node,value]) => routeCards.get(node) === value).map(([node]) => node));
     if (page.kind === 'home' && homeMode === 'following') for (const node of homeController.staleCards(roots)) unchanged.add(node);
     lastCards = currentCards;
-    const options = { advertisements:nativeAds, cache: parsedPosts, excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
+    const options = { advertisements:nativeAds, voteRoots:indexVoteRoots(roots), cache: parsedPosts, excludeElements: unchanged, includeRecommendations: page.kind === 'home' && homeMode === 'for-you' };
     const extracted = extractPosts(document, location.href, options);
     for (const root of roots) if (root instanceof ShadowRoot) {
       const extra = extractPosts(root, location.href, options); extracted.posts.push(...extra.posts); extracted.filtered += extra.filtered; extracted.excluded.push(...extra.excluded);
@@ -345,7 +358,7 @@ async function start() {
     if (added.size) registry?.addAll(added);
     if (relevant) schedule();
   });
-  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'data-ad-click-location', 'data-ad-click-action', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'aria-label', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
+  const observation: MutationObserverInit = { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['id', 'href', 'vote-state', 'disabled', 'aria-disabled', 'data-ad-click-location', 'data-ad-click-action', 'slot', 'data-fullname', 'data-permalink', 'data-subreddit', 'aria-label', 'class', 'data-testid', 'faceplate-tab-selected', 'data-selected', 'data-active', 'active', 'checked', 'hidden', 'aria-selected', 'aria-current', 'aria-pressed', 'data-state', 'selected', 'post-type', 'data-post-type', 'author', 'data-timestamp', 'post-title', 'permalink', 'content-href', 'created-timestamp', 'datetime', 'subreddit-prefixed-name', 'subreddit-name', 'score', 'comment-count', 'promoted', 'is-promoted', 'data-promoted', 'is-ad', 'recommendation-reason', 'is-recommended', 'data-recommended', 'nsfw', 'is-nsfw', 'spoiler', 'is-spoiler', 'src'] };
   observer.observe(document.documentElement, observation); observing = true;
   window.addEventListener('pageshow', event => { cancelNavigation(); suppressed = false; if (event.persisted && pageFromUrl(location.href)?.kind === 'home') { homeMode = 'following'; homeController.reset(); } refresh(); });
   document.addEventListener('click', event => {
